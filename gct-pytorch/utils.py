@@ -155,6 +155,7 @@ class ArgParser(argparse.ArgumentParser):
         self.add_argument('--intermediate_size', type=int, default=256)
         self.add_argument('--num_heads', type=int, default=1)
         self.add_argument('--hidden_dropout_prob', type=float, default=0.25)
+        self.add_argument('--post_mlp_dropout_rate', type=float, default=0.2)
 
         self.add_argument('--learning_rate', type=float, default=1e-3)
         self.add_argument('--eps', type=float, default=1e-8)

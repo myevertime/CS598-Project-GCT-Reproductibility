@@ -200,7 +200,7 @@ class GraphConvolutionalTransformer(nn.Module):
         self.pooler = Pooler(args)
 
         # self.dropout = nn.Dropout(args.hidden_dropout_prob)
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(args.post_mlp_dropout_rate)
         self.classifier = nn.Linear(args.hidden_size, args.num_labels)
 
     def create_matrix_vdp(self, features, masks, priors):

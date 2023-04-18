@@ -1,5 +1,8 @@
 eicu_csv
-eicu_data_*
+eicu_data*
+eicu_output
+
+*/eicu_data*
 
 # user defined
 .idea
