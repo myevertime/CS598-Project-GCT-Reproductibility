@@ -10,6 +10,28 @@ from torch.utils.data import TensorDataset
 from tqdm import tqdm
 import numpy as np
 
+import pyhealth
+from pyhealth.data import Event, Visit, Patient
+from pyhealth.datasets import eICUDataset
+from pyhealth.tasks import readmission_prediction_eicu_fn
+from pyhealth.tasks import mortality_prediction_eicu_fn
+
+# user defined
+from load_eicu import readmission_prediction_eicu_fn_basic
+
+
+class EncounterInfo:
+    def __init__(self, patient_id, encounter_id,
+                 encounter_timestamp, expired, readmission):
+        self.patient_id = patient_id
+        self.encounter_id = encounter_id
+        self.encounter_timestamp = encounter_timestamp
+        self.expired = expired
+        self.readmission = readmission
+        # self.labs = {} # unused at the moment
+        self.dx_ids = []
+        self.treatments = []
+
 
 class EncounterFeatures:
     def __init__(self, patient_id, label_expired, label_readmission, dx_ids, dx_ints, proc_ids, proc_ints):
@@ -37,8 +59,53 @@ class EncounterFeatures:
         self.proc_mask = None
 
 
-def process_eicudataset(encounter_dict):
-    pass
+# parse the eicu data using pyhealth
+# return encounter_dict
+def process_eicudataset(encounter_dict, eicu_dataset: eICUDataset):
+    encounter_counts = 0
+
+    # parse patient information
+    for patient_id, patient in eicu_dataset.patients.items():
+        patient_id = patient.patient_id
+
+        # readmission labels
+        readmission_samples = readmission_prediction_eicu_fn_basic(patient, time_window=30)
+
+        # process visit information
+        for encounter_id, visit in patient.visits.items():
+            encounter_timestamp = visit.encounter_time
+            expired = True if visit.discharge_status == 'Expired' else False
+
+            # readmission labels, check if the encounter is in the readmission samples
+            readmission = 0
+            for sample in readmission_samples:
+                if sample['visit_id'] == encounter_id:
+                    readmission = sample['label']
+
+            # pack it to EncounterInfo
+            encounter = EncounterInfo(patient_id, encounter_id, encounter_timestamp, expired, readmission)
+
+            # extract codes list of the visit
+            conditions = [cond.lower() for cond in visit.get_code_list(table="diagnosisString")]
+            admissionDx = [dx.lower() for dx in visit.get_code_list(table="admissionDx")]
+            treatment = [treat.lower() for treat in visit.get_code_list(table="treatment")]
+            # procedures = visit.get_code_list(table="physicalExam")
+            # drugs = visit.get_code_list(table="medication")
+            # lab = visit.get_code_list(table="lab")
+
+            # parse diagnosis ids
+            encounter.dx_ids = admissionDx + conditions
+            # parse treatment ids
+            encounter.treatments = treatment
+
+            if encounter_id in encounter_dict:
+                print('duplicate encounter id! skip')
+                sys.exit(0)
+            encounter_dict[encounter_id] = encounter
+            encounter_counts += 1
+
+    print('encounter counts: ', encounter_counts)
+    return encounter_dict
 
 
 def get_encounter_features(encounter_dict, skip_duplicate=False, min_num_codes=1, max_num_codes=50):
@@ -134,16 +201,19 @@ def get_encounter_features(encounter_dict, skip_duplicate=False, min_num_codes=1
 
     print('Filtered encounters due to duplicate codes: %d' % num_duplicate)
     print('Filtered encounters due to thresholding: %d' % num_cut)
-    print('Average num_dx_ids: %f' % (num_dx_ids / count))
-    print('Average num_treatments: %f' % (num_treatments / count))
-    print('Average num_unique_dx_ids: %f' % (num_unique_dx_ids / count))
-    print('Average num_unique_treatments: %f' % (num_unique_treatments / count))
+
     print('Min dx cut: %d' % min_dx_cut)
     print('Min treatment cut: %d' % min_treatment_cut)
     print('Max dx cut: %d' % max_dx_cut)
     print('Max treatment cut: %d' % max_treatment_cut)
     print('Number of expired: %d' % num_expired)
     print('Number of readmission: %d' % num_readmission)
+
+    if count != 0:
+        print('Average num_dx_ids: %f' % (num_dx_ids / count))
+        print('Average num_treatments: %f' % (num_treatments / count))
+        print('Average num_unique_dx_ids: %f' % (num_unique_dx_ids / count))
+        print('Average num_unique_treatments: %f' % (num_unique_treatments / count))
 
     return key_list, enc_features_list, dx_str2int, treat_str2int
 
@@ -272,81 +342,3 @@ def get_prior_guide(enc_features):
         values = torch.tensor(feats.prior_values)
         prior_guide_list.append((indices, values))
     return prior_guide_list
-
-
-def get_datasets(data_dir, fold=0):
-    # instead of generating 5 folds manually prior to training using 2 separate scripts, let's generate 1 fold in
-    # same script patient_file = os.path.join(data_dir, 'patient.csv') admission_dx_file = os.path.join(data_dir,
-    # 'admissionDx.csv') diagnosis_file = os.path.join(data_dir, 'diagnosis.csv') treatment_file = os.path.join(
-    # data_dir, 'treatment.csv')
-
-    fold_path = os.path.join(data_dir, 'fold_{}'.format(fold))
-    if not os.path.exists(fold_path):
-        os.makedirs(fold_path)
-
-    stats_path = os.path.join(fold_path, 'train_stats')
-    if not os.path.exists(stats_path):
-        os.makedirs(stats_path)
-
-    cached_path = os.path.join(fold_path, 'cached')
-    if os.path.exists(cached_path):
-        start = time.time()
-        train_dataset = torch.load(os.path.join(cached_path, 'train_dataset.pt'))
-        validation_dataset = torch.load(os.path.join(cached_path, 'valid_dataset.pt'))
-        test_dataset = torch.load(os.path.join(cached_path, 'test_dataset.pt'))
-
-        train_prior_guide = torch.load(os.path.join(cached_path, 'train_priors.pt'))
-        validation_prior_guide = torch.load(os.path.join(cached_path, 'valid_priors.pt'))
-        test_prior_guide = torch.load(os.path.join(cached_path, 'test_priors.pt'))
-
-    else:
-        os.makedirs(cached_path)
-        encounter_dict = {}
-        # print('Processing patient.csv')
-        # encounter_dict = process_patient(patient_file, encounter_dict, hour_threshold=24)
-        # print('Processing admission diagnosis.csv')
-        # encounter_dict = process_admission_dx(admission_dx_file, encounter_dict)
-        # print('Processing diagnosis.csv')
-        # encounter_dict = process_diagnosis(diagnosis_file, encounter_dict)
-        # print('Processing treatment.csv')
-        # encounter_dict = process_treatment(treatment_file, encounter_dict)
-
-        # Loading pyhealth eICUDataset, parse it into encounter_dict
-        print('Loading eICU dataset')
-        encounter_dict = process_eicudataset(encounter_dict)
-
-        key_list, enc_features_list, dx_map, proc_map = get_encounter_features(encounter_dict, skip_duplicate=False,
-                                                                               min_num_codes=1, max_num_codes=50)
-        pickle.dump(dx_map, open(os.path.join(fold_path, 'dx_map.p'), 'wb'))
-        pickle.dump(proc_map, open(os.path.join(fold_path, 'proc_map.p'), 'wb'))
-
-        key_train, key_valid, key_test = select_train_valid_test(key_list, random_seed=fold)
-
-        count_conditional_prob_dp(enc_features_list, stats_path, set(key_train))
-
-        train_enc_features = add_sparse_prior_guide_dp(enc_features_list, stats_path, set(key_train), max_num_codes=50)
-        validation_enc_features = add_sparse_prior_guide_dp(enc_features_list, stats_path, set(key_valid),
-                                                            max_num_codes=50)
-        test_enc_features = add_sparse_prior_guide_dp(enc_features_list, stats_path, set(key_test), max_num_codes=50)
-
-        train_dataset = convert_features_to_tensors(train_enc_features)
-        validation_dataset = convert_features_to_tensors(validation_enc_features)
-        test_dataset = convert_features_to_tensors(test_enc_features)
-
-        torch.save(train_dataset, os.path.join(cached_path, 'train_dataset.pt'))
-        torch.save(validation_dataset, os.path.join(cached_path, 'valid_dataset.pt'))
-        torch.save(test_dataset, os.path.join(cached_path, 'test_dataset.pt'))
-
-        # get prior_indices and prior_values for each split and save as list of tensors
-        train_prior_guide = get_prior_guide(train_enc_features)
-        validation_prior_guide = get_prior_guide(validation_enc_features)
-        test_prior_guide = get_prior_guide(test_enc_features)
-
-        # save the prior_indices and prior_values
-        torch.save(train_prior_guide, os.path.join(cached_path, 'train_priors.pt'))
-        torch.save(validation_prior_guide, os.path.join(cached_path, 'valid_priors.pt'))
-        torch.save(test_prior_guide, os.path.join(cached_path, 'test_priors.pt'))
-
-    return (
-        [train_dataset, validation_dataset, test_dataset],
-        [train_prior_guide, validation_prior_guide, test_prior_guide])
