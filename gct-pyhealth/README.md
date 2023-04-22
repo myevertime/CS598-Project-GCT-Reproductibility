@@ -25,21 +25,23 @@ finish parsing diagnosisString : 108.00234651565552s
 Mapping codes: 100%|██████████| 166355/166355 [00:17<00:00, 9767.95it/s] 
 Loading eICU dataset
 encounter counts:  200859
+
 Filtered encounters due to duplicate codes: 0
 Filtered encounters due to thresholding: 0
+
+Average num_dx_ids: 7.463895
+Average num_treatments: 6.999591
+Average num_unique_dx_ids: 7.463895
+Average num_unique_treatments: 6.999591
+
 Min dx cut: 20846
 Min treatment cut: 27611
 Max dx cut: 138
 Max treatment cut: 635
 Number of expired: 9220
 Number of readmission: 19047
-Average num_dx_ids: 7.463895
-Average num_treatments: 6.999591
-Average num_unique_dx_ids: 7.463895
-Average num_unique_treatments: 6.999591
-Adding prior guide
-Adding prior guide
-Adding prior guide
 
-Process finished with exit code 0
+Adding prior guide
+Adding prior guide
+Adding prior guide
 ```

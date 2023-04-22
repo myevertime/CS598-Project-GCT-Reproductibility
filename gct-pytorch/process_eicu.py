@@ -442,3 +442,9 @@ def get_datasets(data_dir, fold=0):
     return (
         [train_dataset, validation_dataset, test_dataset],
         [train_prior_guide, validation_prior_guide, test_prior_guide])
+
+
+if __name__ == '__main__':
+    data_dir = './eicu_data'
+    ([train_dataset, validation_dataset, test_dataset],
+     [train_prior_guide, validation_prior_guide, test_prior_guide]) = get_datasets(data_dir, fold=0)
