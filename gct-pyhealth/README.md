@@ -12,8 +12,9 @@
 python process_eicu_dataset.py
 ```
 
-Expected output:
+Expected output / statistics:
 
+Without dropping short encounter (<24 hours discharge time)
 ```shell
 INFO: Pandarallel will run on 6 workers.
 INFO: Pandarallel will use Memory file system to transfer data between the main process and workers.
@@ -29,17 +30,43 @@ encounter counts:  200859
 Filtered encounters due to duplicate codes: 0
 Filtered encounters due to thresholding: 0
 
-Average num_dx_ids: 7.463895
-Average num_treatments: 6.999591
-Average num_unique_dx_ids: 7.463895
-Average num_unique_treatments: 6.999591
-
 Min dx cut: 20846
 Min treatment cut: 27611
 Max dx cut: 138
 Max treatment cut: 635
 Number of expired: 9220
 Number of readmission: 19047
+
+Average num_dx_ids: 7.463895
+Average num_treatments: 6.999591
+Average num_unique_dx_ids: 7.463895
+Average num_unique_treatments: 6.999591
+
+Adding prior guide
+Adding prior guide
+Adding prior guide
+```
+
+
+Dropping short encounter (<24 hours discharge time)
+```shell
+Loading eICU dataset
+encounter counts:  132900
+dropped short encounter counts:  67959
+Filtered encounters due to duplicate codes: 0
+Filtered encounters due to thresholding: 0
+
+Min dx cut: 4188
+Min treatment cut: 17257
+Max dx cut: 137
+Max treatment cut: 629
+Number of expired: 6243
+Number of readmission: 13772
+
+Average num_dx_ids: 7.835349
+Average num_treatments: 7.730895
+Average num_unique_dx_ids: 7.835349
+Average num_unique_treatments: 7.730895
 
 Adding prior guide
 Adding prior guide

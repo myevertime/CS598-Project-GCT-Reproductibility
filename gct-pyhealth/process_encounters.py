@@ -59,55 +59,6 @@ class EncounterFeatures:
         self.proc_mask = None
 
 
-# parse the eicu data using pyhealth
-# return encounter_dict
-def process_eicudataset(encounter_dict, eicu_dataset: eICUDataset):
-    encounter_counts = 0
-
-    # parse patient information
-    for patient_id, patient in eicu_dataset.patients.items():
-        patient_id = patient.patient_id
-
-        # readmission labels
-        readmission_samples = readmission_prediction_eicu_fn_basic(patient, time_window=30)
-
-        # process visit information
-        for encounter_id, visit in patient.visits.items():
-            encounter_timestamp = visit.encounter_time
-            expired = True if visit.discharge_status == 'Expired' else False
-
-            # readmission labels, check if the encounter is in the readmission samples
-            readmission = 0
-            for sample in readmission_samples:
-                if sample['visit_id'] == encounter_id:
-                    readmission = sample['label']
-
-            # pack it to EncounterInfo
-            encounter = EncounterInfo(patient_id, encounter_id, encounter_timestamp, expired, readmission)
-
-            # extract codes list of the visit
-            conditions = [cond.lower() for cond in visit.get_code_list(table="diagnosisString")]
-            admissionDx = [dx.lower() for dx in visit.get_code_list(table="admissionDx")]
-            treatment = [treat.lower() for treat in visit.get_code_list(table="treatment")]
-            # procedures = visit.get_code_list(table="physicalExam")
-            # drugs = visit.get_code_list(table="medication")
-            # lab = visit.get_code_list(table="lab")
-
-            # parse diagnosis ids
-            encounter.dx_ids = admissionDx + conditions
-            # parse treatment ids
-            encounter.treatments = treatment
-
-            if encounter_id in encounter_dict:
-                print('duplicate encounter id! skip')
-                sys.exit(0)
-            encounter_dict[encounter_id] = encounter
-            encounter_counts += 1
-
-    print('encounter counts: ', encounter_counts)
-    return encounter_dict
-
-
 def get_encounter_features(encounter_dict, skip_duplicate=False, min_num_codes=1, max_num_codes=50):
     """
     In the original tf implementation, dx_ints and proc_ints are serialized as variable length sequences,
