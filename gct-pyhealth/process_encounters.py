@@ -16,9 +16,6 @@ from pyhealth.datasets import eICUDataset
 from pyhealth.tasks import readmission_prediction_eicu_fn
 from pyhealth.tasks import mortality_prediction_eicu_fn
 
-# user defined
-from load_eicu import readmission_prediction_eicu_fn_basic
-
 
 class EncounterInfo:
     def __init__(self, patient_id, encounter_id,

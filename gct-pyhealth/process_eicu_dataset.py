@@ -1,6 +1,30 @@
 from pyhealth.datasets import eICUDataset
 from process_encounters import *
-from load_eicu import *
+
+
+def readmission_prediction_eicu_fn_basic(patient: Patient, time_window=5):
+    samples = []
+    # we will drop the last visit
+    for i in range(len(patient) - 1):
+        visit: Visit = patient[i]
+        next_visit: Visit = patient[i + 1]
+        # get time difference between current visit and next visit
+        time_diff = (next_visit.encounter_time - visit.encounter_time).days
+        readmission_label = 1 if time_diff < time_window else 0
+
+        # exclude: visits without any codes/events
+        if visit.num_events == 0:
+            continue
+        # TODO: should also exclude visit with age < 18
+        samples.append(
+            {
+                "visit_id": visit.visit_id,
+                "patient_id": patient.patient_id,
+                "label": readmission_label,
+            }
+        )
+    # no cohort selection
+    return samples
 
 
 # parse the eicu data using pyhealth
@@ -22,8 +46,8 @@ def get_encounter_dict(eicu_dataset: eICUDataset):
         for encounter_id, visit in patient.visits.items():
             encounter_timestamp = visit.encounter_time
 
-            # dropping patient with less than 24 hours duration minute
-            if (visit.discharge_time - visit.encounter_time) < np.timedelta64(hour_threshold, 'h'):
+            # dropping patient with more than 24 hours duration minute
+            if (visit.discharge_time - visit.encounter_time) > np.timedelta64(hour_threshold, 'h'):
                 dropped_short_encounter_counts += 1
                 continue
 
@@ -63,7 +87,7 @@ def get_encounter_dict(eicu_dataset: eICUDataset):
     return encounter_dict
 
 
-def process_eicu_dataset(data_dir, eicu_dataset: eICUDataset, fold=0):
+def get_eicu_datasets(data_dir, fold=0):
     # instead of generating 5 folds manually prior to training using 2 separate scripts, let's generate 1 fold in
     # same script patient_file = os.path.join(data_dir, 'patient.csv') admission_dx_file = os.path.join(data_dir,
     # 'admissionDx.csv') diagnosis_file = os.path.join(data_dir, 'diagnosis.csv') treatment_file = os.path.join(
@@ -93,6 +117,14 @@ def process_eicu_dataset(data_dir, eicu_dataset: eICUDataset, fold=0):
 
         # Loading pyhealth eICUDataset, parse it into encounter_dict
         print('Loading eICU dataset')
+        eicu_dataset = eICUDataset(
+            root='../eicu_csv',
+            tables=["treatment", "admissionDx", "diagnosisString"],
+            refresh_cache=False,
+            # dev=True,
+        )
+
+        # parse the eICU dataset to encounter dict
         encounter_dict = get_encounter_dict(eicu_dataset=eicu_dataset)
 
         key_list, enc_features_list, dx_map, proc_map = get_encounter_features(encounter_dict, skip_duplicate=False,
@@ -133,12 +165,5 @@ def process_eicu_dataset(data_dir, eicu_dataset: eICUDataset, fold=0):
 
 
 if __name__ == "__main__":
-    eicu_dataset = eICUDataset(
-        root='../eicu_csv',
-        tables=["treatment", "admissionDx", "diagnosisString"],
-        refresh_cache=False,
-        # dev=True,
-    )
-
     data_dir = './eicu_data'
-    process_eicu_dataset(data_dir, eicu_dataset, fold=0)
+    get_eicu_datasets(data_dir, fold=1)

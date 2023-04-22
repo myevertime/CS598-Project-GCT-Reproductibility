@@ -48,27 +48,28 @@ Adding prior guide
 ```
 
 
-Dropping short encounter (<24 hours discharge time)
+Dropping long encounter (>24 hours discharge time)
 ```shell
 Loading eICU dataset
-encounter counts:  132900
-dropped short encounter counts:  67959
+encounter counts:  68076
+dropped short encounter counts:  132783
 Filtered encounters due to duplicate codes: 0
 Filtered encounters due to thresholding: 0
 
-Min dx cut: 4188
-Min treatment cut: 17257
-Max dx cut: 137
-Max treatment cut: 629
-Number of expired: 6243
-Number of readmission: 13772
+Min dx cut: 16670
+Min treatment cut: 10373
+Max dx cut: 1
+Max treatment cut: 6
+Number of expired: 2983
+Number of readmission: 5282
 
-Average num_dx_ids: 7.835349
-Average num_treatments: 7.730895
-Average num_unique_dx_ids: 7.835349
-Average num_unique_treatments: 7.730895
+Average num_dx_ids: 6.462268
+Average num_treatments: 5.026276
+Average num_unique_dx_ids: 6.462268
+Average num_unique_treatments: 5.026276
 
 Adding prior guide
 Adding prior guide
 Adding prior guide
+
 ```

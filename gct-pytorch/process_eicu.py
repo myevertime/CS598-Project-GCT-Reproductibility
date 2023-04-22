@@ -41,6 +41,8 @@ class EncounterFeatures:
 
 
 def process_patient(infile, encounter_dict, hour_threshold=24):
+    dropped_count = 0
+
     with open(infile, 'r') as f:
         patient_dict = {}
         for line in csv.DictReader(f):
@@ -75,6 +77,7 @@ def process_patient(infile, encounter_dict, hour_threshold=24):
             expired = True if discharge_status == 'Expired' else False
             readmission = enc_readmission_dict[encounter_id]
             if duration_minute > 60. * hour_threshold:
+                dropped_count += 1
                 continue
             ei = EncounterInfo(patient_id, encounter_id, encounter_timestamp, expired, readmission)
             if encounter_id in encounter_dict:
@@ -82,6 +85,8 @@ def process_patient(infile, encounter_dict, hour_threshold=24):
                 sys.exit(0)
             encounter_dict[encounter_id] = ei
             count += 1
+
+    print('dropped {} encounters due to duration > {} hours'.format(dropped_count, hour_threshold))
     return encounter_dict
 
 
@@ -229,16 +234,19 @@ def get_encounter_features(encounter_dict, skip_duplicate=False, min_num_codes=1
 
     print('Filtered encounters due to duplicate codes: %d' % num_duplicate)
     print('Filtered encounters due to thresholding: %d' % num_cut)
-    print('Average num_dx_ids: %f' % (num_dx_ids / count))
-    print('Average num_treatments: %f' % (num_treatments / count))
-    print('Average num_unique_dx_ids: %f' % (num_unique_dx_ids / count))
-    print('Average num_unique_treatments: %f' % (num_unique_treatments / count))
+
     print('Min dx cut: %d' % min_dx_cut)
     print('Min treatment cut: %d' % min_treatment_cut)
     print('Max dx cut: %d' % max_dx_cut)
     print('Max treatment cut: %d' % max_treatment_cut)
     print('Number of expired: %d' % num_expired)
     print('Number of readmission: %d' % num_readmission)
+
+    if count != 0:
+        print('Average num_dx_ids: %f' % (num_dx_ids / count))
+        print('Average num_treatments: %f' % (num_treatments / count))
+        print('Average num_unique_dx_ids: %f' % (num_unique_dx_ids / count))
+        print('Average num_unique_treatments: %f' % (num_unique_treatments / count))
 
     return key_list, enc_features_list, dx_str2int, treat_str2int
 
