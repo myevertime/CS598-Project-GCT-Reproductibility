@@ -166,4 +166,4 @@ def get_eicu_datasets(data_dir, fold=0):
 
 if __name__ == "__main__":
     data_dir = './eicu_data'
-    get_eicu_datasets(data_dir, fold=1)
+    get_eicu_datasets(data_dir, fold=0)

@@ -18,7 +18,7 @@ LR=0.00022
 DROPOUT=0.08
 REG_COEF=0.1
 LABEL_KEY='readmission'
-OUTPUT_DIR='eicu_output/model_'${LR}'_'${DROPOUT}'_'${LABEL_KEY}
+OUTPUT_DIR='eicu_output/dev_model_'${LR}'_'${DROPOUT}'_'${LABEL_KEY}
 
 mkdir -p $OUTPUT_DIR
 python train.py \
@@ -33,7 +33,7 @@ python train.py \
     --do_eval \
     --do_test \
     --label_key $LABEL_KEY \
-    --max_steps 1000000 \
+    --max_steps 100000 \
     --hidden_dropout_prob $DROPOUT \
     --num_stacks 2 \
     --learning_rate $LR \
@@ -55,7 +55,7 @@ LR=0.00011
 DROPOUT=0.72
 REG_COEF=1.5
 LABEL_KEY='expired'
-OUTPUT_DIR='eicu_output/model_'${LR}'_'${DROPOUT}'_'${LABEL_KEY}
+OUTPUT_DIR='eicu_output/dev_model_'${LR}'_'${DROPOUT}'_'${LABEL_KEY}
 
 mkdir -p $OUTPUT_DIR
 python train.py \
@@ -70,7 +70,7 @@ python train.py \
     --do_eval \
     --do_test \
     --label_key $LABEL_KEY \
-    --max_steps 1000000 \
+    --max_steps 100000 \
     --hidden_dropout_prob $DROPOUT \
     --num_stacks 2 \
     --learning_rate $LR \
