@@ -183,6 +183,7 @@ class Pooler(nn.Module):
 class GraphConvolutionalTransformer(nn.Module):
     def __init__(self, args):
         super(GraphConvolutionalTransformer, self).__init__()
+
         self.num_labels = args.num_labels
         self.label_key = args.label_key
         self.reg_coef = args.reg_coef
@@ -195,6 +196,7 @@ class GraphConvolutionalTransformer(nn.Module):
         self.output_attentions = args.output_attentions
         self.output_hidden_states = args.output_hidden_states
         self.feature_keys = args.feature_keys
+
         self.layers = nn.ModuleList([GCTLayer(args, i) for i in range(args.num_stacks)])
         self.embeddings = FeatureEmbedder(args)
         self.pooler = Pooler(args)

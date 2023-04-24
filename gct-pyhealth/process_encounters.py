@@ -169,15 +169,19 @@ def get_encounter_features(encounter_dict, skip_duplicate=False, min_num_codes=1
 def select_train_valid_test(key_list, random_seed=1234):
     key_train, key_temp = ms.train_test_split(key_list, test_size=0.2, random_state=random_seed)
     key_valid, key_test = ms.train_test_split(key_temp, test_size=0.5, random_state=random_seed)
-    # print('@@@@@@@@@@@@@@@@@@@@')
-    # print('keys: {}'.format(key_valid[:5]))
     return key_train, key_valid, key_test
 
 
 def count_conditional_prob_dp(enc_features_list, output_path, train_key_set=None):
-    dx_freqs = {}
-    proc_freqs = {}
-    dp_freqs = {}
+    """
+    This is a Python function called count_conditional_prob_dp that takes in a list of encoded features,
+    an output path to save the conditional probabilities, and a training key set, and calculates the empirical
+    conditional probabilities for diagnosis-procedure (DP) and procedure-diagnosis (PD) pairs.
+    """
+    dx_freqs = {}  # diagnosis
+    proc_freqs = {}  # treatment
+    dp_freqs = {}  # diagnosis-treatment
+
     total_visit = 0
     for enc_feature in enc_features_list:
         key = enc_feature.patient_id
@@ -202,13 +206,9 @@ def count_conditional_prob_dp(enc_features_list, output_path, train_key_set=None
                 dp_freqs[dp] += 1
         total_visit += 1
 
-    dx_probs = dict([(k, v / float(total_visit)) for k, v in dx_freqs.items()
-                     ])
-    proc_probs = dict([
-        (k, v / float(total_visit)) for k, v in proc_freqs.items()
-    ])
-    dp_probs = dict([(k, v / float(total_visit)) for k, v in dp_freqs.items()
-                     ])
+    dx_probs = dict([(k, v / float(total_visit)) for k, v in dx_freqs.items()])
+    proc_probs = dict([(k, v / float(total_visit)) for k, v in proc_freqs.items()])
+    dp_probs = dict([(k, v / float(total_visit)) for k, v in dp_freqs.items()])
 
     dp_cond_probs = {}
     pd_cond_probs = {}
@@ -268,13 +268,10 @@ def add_sparse_prior_guide_dp(enc_features_list, stats_path, key_set=None, max_n
 
 
 def convert_features_to_tensors(enc_features):
-    # all_patient_ids = torch.tensor([f.patient_id for f in enc_features], dtype=torch.long)
     all_readmission_labels = torch.tensor([f.label_readmission for f in enc_features], dtype=torch.long)
     all_expired_labels = torch.tensor([f.label_expired for f in enc_features], dtype=torch.long)
     all_dx_ints = torch.tensor([f.dx_ints for f in enc_features], dtype=torch.long)
     all_proc_ints = torch.tensor([f.proc_ints for f in enc_features], dtype=torch.long)
-    # all_prior_indices = torch.tensor([f.prior_indices for f in enc_features], dtype=torch.long)
-    # all_prior_values = torch.tensor([f.prior_values for f in enc_features], dtype=torch.float)
     all_dx_masks = torch.tensor([f.dx_mask for f in enc_features], dtype=torch.float)
     all_proc_masks = torch.tensor([f.proc_mask for f in enc_features], dtype=torch.float)
     dataset = TensorDataset(all_dx_ints, all_proc_ints, all_dx_masks, all_proc_masks, all_readmission_labels,
