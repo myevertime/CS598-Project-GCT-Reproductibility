@@ -6,7 +6,7 @@ import torch
 import json
 import random
 from torch import nn
-from torch.utils.data import TensorDataset, Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, TensorDataset
 import argparse
 
 from sklearn.metrics import (
@@ -67,7 +67,7 @@ def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
 
 
 def nested_concat(tensors, new_tensors, dim=0):
-    "Concat the `new_tensors` to `tensors` on `dim`. Works for tensors or nested list/tuples of tensors."
+    """Concat the `new_tensors` to `tensors` on `dim`. Works for tensors or nested list/tuples of tensors."""
     assert type(tensors) == type(
         new_tensors
     ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
@@ -91,18 +91,11 @@ def nested_detach(tensors):
 
 
 def prepare_data(data, priors_data, device):
-    features = {}
-    features['dx_ints'] = data[0]
-    features['proc_ints'] = data[1]
-    features['dx_masks'] = data[2]
-    features['proc_masks'] = data[3]
-    features['readmission'] = data[4]
-    features['expired'] = data[5]
+    features = {'dx_ints': data[0], 'proc_ints': data[1], 'dx_masks': data[2], 'proc_masks': data[3],
+                'readmission': data[4], 'expired': data[5]}
     for k, v in features.items():
         features[k] = v.to(device)
-    priors = {}
-    priors['indices'] = priors_data[0].to(device)
-    priors['values'] = priors_data[1].to(device)
+    priors = {'indices': priors_data[0].to(device), 'values': priors_data[1].to(device)}
 
     return features, priors
 
@@ -133,42 +126,15 @@ def compute_metrics(preds, labels):
     return metrics
 
 
-"""
-for name, param in model.named_parameters():
-    print(name, param.is_cuda)
-"""
-
-
 class ArgParser(argparse.ArgumentParser):
     def __init__(self):
         super(ArgParser, self).__init__()
-        self.add_argument('--data_dir', type=str, required=True)
-        self.add_argument('--output_dir', type=str, required=True)
-
-        self.add_argument('--max_num_codes', type=int, default=50)
-        self.add_argument('--feature_keys', action='append', default=['dx_ints', 'proc_ints'])
-        self.add_argument('--vocab_sizes', type=json.loads, default={'dx_ints': 3249, 'proc_ints': 2210})
-        self.add_argument('--prior_scalar', type=float, default=0.5)
-
-        self.add_argument('--num_stacks', type=int, default=3)
-        self.add_argument('--hidden_size', type=int, default=128)
-        self.add_argument('--intermediate_size', type=int, default=256)
-        self.add_argument('--num_heads', type=int, default=1)
-        self.add_argument('--hidden_dropout_prob', type=float, default=0.25)
-        self.add_argument('--post_mlp_dropout_rate', type=float, default=0.2)
 
         self.add_argument('--learning_rate', type=float, default=1e-3)
         self.add_argument('--eps', type=float, default=1e-8)
-        self.add_argument('--batch_size', type=int, default=64)
         self.add_argument('--max_grad_norm', type=float, default=1.0)
+        self.add_argument('--intermediate_size', type=int, default=256)
 
-        self.add_argument('--use_guide', default=False, action='store_true')
-        self.add_argument('--use_prior', default=False, action='store_true')
-
-        self.add_argument('--output_hidden_states', default=False, action='store_true')
-        self.add_argument('--output_attentions', default=False, action='store_true')
-
-        self.add_argument('--fold', type=int, default=42)
         self.add_argument('--eval_batch_size', type=int, default=256)
 
         self.add_argument('--warmup', type=float, default=0.05)
@@ -176,10 +142,6 @@ class ArgParser(argparse.ArgumentParser):
         self.add_argument('--max_steps', type=int, default=100000)
         self.add_argument('--num_train_epochs', type=int, default=0)
 
-        self.add_argument('--label_key', type=str, default='expired')
-        self.add_argument('--num_labels', type=int, default=2)
-
-        self.add_argument('--reg_coef', type=float, default=0)
         self.add_argument('--seed', type=int, default=42)
 
         self.add_argument('--do_train', default=False, action='store_true')
@@ -189,3 +151,40 @@ class ArgParser(argparse.ArgumentParser):
     def parse_args(self):
         args = super().parse_args()
         return args
+
+
+def prediction_loop(device, label_key, model, dataloader, priors_datalaoder, description='Evaluating'):
+    from tqdm import tqdm
+    batch_size = dataloader.batch_size
+    eval_losses = []
+    preds = None
+    label_ids = None
+    model.eval()
+
+    for data, priors_data in tqdm(zip(dataloader, priors_datalaoder), desc=description):
+        data, priors_data = prepare_data(data, priors_data, device)
+        with torch.no_grad():
+            outputs = model(data, priors_data)
+            loss = outputs[0].mean().item()
+            logits = outputs[1]
+
+        labels = data[label_key]
+
+        batch_size = data[list(data.keys())[0]].shape[0]
+        eval_losses.extend([loss] * batch_size)
+        preds = logits if preds is None else nested_concat(preds, logits, dim=0)
+        label_ids = labels if label_ids is None else nested_concat(label_ids, labels, dim=0)
+
+    if preds is not None:
+        preds = nested_numpify(preds)
+    if label_ids is not None:
+        label_ids = nested_numpify(label_ids)
+    metrics = compute_metrics(preds, label_ids)
+
+    metrics['eval_loss'] = np.mean(eval_losses)
+
+    for key in list(metrics.keys()):
+        if not key.startswith('eval_'):
+            metrics['eval_{}'.format(key)] = metrics.pop(key)
+
+    return metrics
