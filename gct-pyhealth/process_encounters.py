@@ -107,6 +107,7 @@ def get_encounter_features(encounter_dict, skip_duplicate=False, min_num_codes=1
         num_unique_dx_ids += len(set(enc.dx_ids))
         num_unique_treatments += len(set(enc.treatments))
 
+        # mapping the string to int
         for dx_id in enc.dx_ids:
             if dx_id not in dx_str2int:
                 dx_str2int[dx_id] = len(dx_str2int)
@@ -137,6 +138,8 @@ def get_encounter_features(encounter_dict, skip_duplicate=False, min_num_codes=1
         key_list.append(patient_id)
         enc_features_list.append(enc_features)
 
+
+    # add padding
     for ef in enc_features_list:
         dx_padding_idx = len(dx_str2int)
         proc_padding_idx = len(treat_str2int)
