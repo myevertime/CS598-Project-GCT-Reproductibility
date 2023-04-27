@@ -74,9 +74,9 @@ def main():
     datasets, prior_guides = get_datasets(args.data_dir, fold=args.fold)
     train_dataset, eval_dataset, test_dataset = datasets
     train_priors, eval_priors, test_priors = prior_guides
-    train_priors_dataset = eICUDataset(train_priors)
-    eval_priors_dataset = eICUDataset(eval_priors)
-    test_priors_dataset = eICUDataset(test_priors)
+    train_priors_dataset = eICUPriorDataset(train_priors)
+    eval_priors_dataset = eICUPriorDataset(eval_priors)
+    test_priors_dataset = eICUPriorDataset(test_priors)
 
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size)
     eval_dataloader = DataLoader(eval_dataset, batch_size=args.batch_size)

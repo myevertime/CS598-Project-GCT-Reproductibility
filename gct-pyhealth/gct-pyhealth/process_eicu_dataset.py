@@ -87,7 +87,7 @@ def get_encounter_dict(eicu_dataset: eICUDataset):
     return encounter_dict
 
 
-def get_eicu_datasets(data_dir, fold=0):
+def get_eicu_datasets(data_dir, eicu_csv_dir, fold=0):
     # instead of generating 5 folds manually prior to training using 2 separate scripts, let's generate 1 fold in
     # same script patient_file = os.path.join(data_dir, 'patient.csv') admission_dx_file = os.path.join(data_dir,
     # 'admissionDx.csv') diagnosis_file = os.path.join(data_dir, 'diagnosis.csv') treatment_file = os.path.join(
@@ -103,6 +103,7 @@ def get_eicu_datasets(data_dir, fold=0):
 
     cached_path = os.path.join(fold_path, 'cached')
     if os.path.exists(cached_path):
+        print("Found cached data, loading...")
         start = time.time()
         train_dataset = torch.load(os.path.join(cached_path, 'train_dataset.pt'))
         validation_dataset = torch.load(os.path.join(cached_path, 'valid_dataset.pt'))
@@ -111,6 +112,7 @@ def get_eicu_datasets(data_dir, fold=0):
         train_prior_guide = torch.load(os.path.join(cached_path, 'train_priors.pt'))
         validation_prior_guide = torch.load(os.path.join(cached_path, 'valid_priors.pt'))
         test_prior_guide = torch.load(os.path.join(cached_path, 'test_priors.pt'))
+        print('loading cached data takes: {}s'.format(time.time() - start))
 
     else:
         os.makedirs(cached_path)
@@ -118,7 +120,7 @@ def get_eicu_datasets(data_dir, fold=0):
         # Loading pyhealth eICUDataset, parse it into encounter_dict
         print('Loading eICU dataset')
         eicu_dataset = eICUDataset(
-            root='../eicu_csv',
+            root=eicu_csv_dir,
             tables=["treatment", "admissionDx", "diagnosisString"],
             refresh_cache=False,
             # dev=True,
@@ -165,5 +167,6 @@ def get_eicu_datasets(data_dir, fold=0):
 
 
 if __name__ == "__main__":
-    data_dir = './eicu_data'
-    get_eicu_datasets(data_dir, fold=0)
+    cache_dir = './eicu_data'
+    eicu_csv_dir = '../eicu_csv'
+    get_eicu_datasets(cache_dir, eicu_csv_dir, fold=0)

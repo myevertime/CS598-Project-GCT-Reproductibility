@@ -138,7 +138,6 @@ def get_encounter_features(encounter_dict, skip_duplicate=False, min_num_codes=1
         key_list.append(patient_id)
         enc_features_list.append(enc_features)
 
-
     # add padding
     for ef in enc_features_list:
         dx_padding_idx = len(dx_str2int)
@@ -277,8 +276,11 @@ def convert_features_to_tensors(enc_features):
     all_proc_ints = torch.tensor([f.proc_ints for f in enc_features], dtype=torch.long)
     all_dx_masks = torch.tensor([f.dx_mask for f in enc_features], dtype=torch.float)
     all_proc_masks = torch.tensor([f.proc_mask for f in enc_features], dtype=torch.float)
-    dataset = TensorDataset(all_dx_ints, all_proc_ints, all_dx_masks, all_proc_masks, all_readmission_labels,
-                            all_expired_labels)
+    # all_prior_indices = torch.tensor([f.prior_indices for f in enc_features], dtype=torch.long)
+    # all_prior_values = torch.tensor([f.prior_values for f in enc_features], dtype=torch.float)
+    dataset = TensorDataset(all_dx_ints, all_proc_ints,
+                            all_dx_masks, all_proc_masks,
+                            all_readmission_labels, all_expired_labels)
 
     return dataset
 

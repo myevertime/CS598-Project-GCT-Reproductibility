@@ -18,7 +18,7 @@ from sklearn.metrics import (
     precision_recall_curve)
 
 
-class eICUDataset(Dataset):
+class eICUPriorDataset(Dataset):
     def __init__(self, data):
         self.data = data
 

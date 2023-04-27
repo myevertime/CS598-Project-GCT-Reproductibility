@@ -1,8 +1,11 @@
-from pyhealth.data import Patient, Visit
 import numpy as np
+import pickle
+import os
+
+from pyhealth.data import Patient, Visit
 
 
-def count_conditional_prob_dp(enc_features_list, train_key_set=None):
+def count_conditional_prob_dp(eicu_samples_dict, output_path, train_key_set=None):
     """
     This is a Python function called count_conditional_prob_dp that takes in a list of encoded features,
     an output path to save the conditional probabilities, and a training key set, and calculates the empirical
@@ -13,23 +16,23 @@ def count_conditional_prob_dp(enc_features_list, train_key_set=None):
     dp_freqs = {}  # diagnosis-treatment
 
     total_visit = 0
-    for enc_feature in enc_features_list:
-        key = enc_feature.patient_id
+    for sample in eicu_samples_dict:
+        key = sample['visit_id']
         if train_key_set is not None and key not in train_key_set:
             total_visit += 1
             continue
-        dx_ids = enc_feature.dx_ids
-        proc_ids = enc_feature.proc_ids
-        for dx in dx_ids:
+        conditions = sample['conditions']
+        procedures = sample['procedures']
+        for dx in conditions:
             if dx not in dx_freqs:
                 dx_freqs[dx] = 0
             dx_freqs[dx] += 1
-        for proc in proc_ids:
+        for proc in procedures:
             if proc not in proc_freqs:
                 proc_freqs[proc] = 0
             proc_freqs[proc] += 1
-        for dx in dx_ids:
-            for proc in proc_ids:
+        for dx in conditions:
+            for proc in procedures:
                 dp = dx + ',' + proc
                 if dp not in dp_freqs:
                     dp_freqs[dp] = 0
@@ -53,7 +56,9 @@ def count_conditional_prob_dp(enc_features_list, train_key_set=None):
                 dp_cond_probs[dp] = 0.0
                 pd_cond_probs[pd] = 0.0
     # originally supposed to pickle. but for now just return the 2 cond prob dicts that are used
-    return dp_cond_probs, pd_cond_probs
+    # return dp_cond_probs, pd_cond_probs
+    pickle.dump(dp_cond_probs, open(os.path.join(output_path, 'dp_cond_probs.empirical.p'), 'wb'))
+    pickle.dump(pd_cond_probs, open(os.path.join(output_path, 'pd_cond_probs.empirical.p'), 'wb'))
 
 
 def mortality_prediction_eicu_fn_gct(patient: Patient):
@@ -138,7 +143,6 @@ def mortality_prediction_eicu_fn_gct(patient: Patient):
     # no cohort selection
     return samples
 
-
 # TODO
 # def readmission_prediction_eicu_fn_gct(patient: Patient, time_window=5):
 #     """Processes a single patient for the readmission prediction task.
@@ -193,3 +197,83 @@ def mortality_prediction_eicu_fn_gct(patient: Patient):
 #         )
 #     # no cohort selection
 #     return samples
+
+
+if __name__ == "__main__":
+    from prediction_tasks import mortality_prediction_eicu_fn_gct
+    from pyhealth.datasets.sample_dataset import SampleEHRDataset
+    from tqdm import tqdm
+
+    from pyhealth.datasets import eICUDataset
+
+    print('Loading eICU dataset')
+    eicu_ds = eICUDataset(
+        root='../../eicu_csv',
+        tables=["admissionDx", "diagnosisString", "treatment"],
+        refresh_cache=False,
+        # dev=True
+    )
+
+    eicu_ds.stat()
+    eicu_ds.info()
+
+    # under the hook of:
+    # eicu_ds_mortality = eicu_ds.set_task(task_fn=mortality_prediction_eicu_fn_gct)
+    task_name = "mortality_prediction_eicu_fn_gct"
+    samples_list = []
+
+    # diagnosis and treatment codes mapping list
+    cond_enc_map = {}
+    proc_enc_map = {}
+
+    min_num_codes = 1
+    max_num_codes = 50
+
+    # add labeling
+    for patient_id, patient in tqdm(eicu_ds.patients.items(),
+                                    desc=f"Generating samples for {task_name}"):
+        samples = mortality_prediction_eicu_fn_gct(patient)
+
+        # mapping the string to int
+        for sample in samples:
+            conditions = sample['conditions']
+            procedures = sample['procedures']
+            for dx_id in conditions:
+                if dx_id not in cond_enc_map:
+                    cond_enc_map[dx_id] = len(cond_enc_map)
+            for treat_id in procedures:
+                if treat_id not in proc_enc_map:
+                    proc_enc_map[treat_id] = len(proc_enc_map)
+
+            sample['conditions_enc'].extend([cond_enc_map[item] for item in sample['conditions']])
+            sample['procedures_enc'].extend([proc_enc_map[item] for item in sample['procedures']])
+
+        if len(samples) != 0:
+            samples_list.extend(samples)
+
+
+    # TODO: update the mask with paddings
+    for sample in samples_list:
+        # add padding for conditions
+        dx_padding_idx = len(cond_enc_map)
+        if len(sample['conditions_enc']) < max_num_codes:
+            sample['conditions_enc'].extend([dx_padding_idx] * (max_num_codes - len(sample['conditions_enc'])))
+        sample['conditions_mask'] = [0 if i == dx_padding_idx else 1 for i in sample['conditions_enc']]
+
+        # add padding for procedures
+        proc_padding_idx = len(proc_enc_map)
+        if len(sample['procedures_enc']) < max_num_codes:
+            sample['procedures_enc'].extend([proc_padding_idx] * (max_num_codes - len(sample['procedures_enc'])))
+        sample['procedures_mask'] = [0 if i == proc_padding_idx else 1 for i in sample['procedures_enc']]
+
+    # TODO: count conditional probability
+
+    # create a new dataset with task function
+    eicu_ds_mortality = SampleEHRDataset(
+        samples_list,
+        dataset_name=eicu_ds.dataset_name,
+        task_name=task_name,
+    )
+
+    # stats info
+    eicu_ds_mortality.stat()

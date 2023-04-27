@@ -341,68 +341,68 @@ class GCT(BaseModel):
 
         return tuple(v for v in [loss, logits, all_hidden_states, all_attentions] if v is not None)
 
-    def forward(self, **kwargs) -> Dict[str, torch.Tensor]:
-        """Forward propagation.
-
-        The label `kwargs[self.label_key]` is a list of labels for each patient.
-
-        Args:
-            **kwargs: keyword arguments for the model. The keys must contain
-                all the feature keys and the label key.
-
-        Returns:
-            A dictionary with the following keys:
-                loss: a scalar tensor representing the loss.
-                y_prob: a tensor representing the predicted probabilities.
-                y_true: a tensor representing the true labels.
-        """
-        patient_emb = []
-        for feature_key in self.feature_keys:
-            input_info = self.dataset.input_info[feature_key]
-            dim_, type_ = input_info["dim"], input_info["type"]
-
-            # for case 1: [code1, code2, code3, ...]
-            if (dim_ == 2) and (type_ == str):
-                raise NotImplementedError
-
-            # for case 2: [[code1, code2], [code3, ...], ...]
-            elif (dim_ == 3) and (type_ == str):
-                raise NotImplementedError
-
-
-            # for case 3: [[1.5, 2.0, 0.0], ...]
-            elif (dim_ == 2) and (type_ in [float, int]):
-                raise NotImplementedError
-
-
-            # for case 4: [[[1.5, 2.0, 0.0], [1.8, 2.4, 6.0]], ...]
-            elif (dim_ == 3) and (type_ in [float, int]):
-                raise NotImplementedError
-            else:
-                raise NotImplementedError
-
-            # _, x = self.transformer[feature_key](x, mask)
-            patient_emb.append(x)
-
-        # computed patient embedding
-        patient_emb = torch.cat(patient_emb, dim=1)
-
-        # get logits and loss
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
-        # obtain y_true, loss, y_prob
-        y_true = self.prepare_labels(kwargs[self.label_key], self.label_tokenizer)
-        loss = self.get_loss(logits, data[self.label_key], all_attentions)
-        y_prob = self.prepare_y_prob(logits)
-        results = {
-            "loss": loss,
-            "y_prob": y_prob,
-            "y_true": y_true,
-            "logit": logits
-        }
-        if kwargs.get("embed", False):
-            results["embed"] = patient_emb
-        return results
+    # def forward(self, **kwargs) -> Dict[str, torch.Tensor]:
+    #     """Forward propagation.
+    #
+    #     The label `kwargs[self.label_key]` is a list of labels for each patient.
+    #
+    #     Args:
+    #         **kwargs: keyword arguments for the model. The keys must contain
+    #             all the feature keys and the label key.
+    #
+    #     Returns:
+    #         A dictionary with the following keys:
+    #             loss: a scalar tensor representing the loss.
+    #             y_prob: a tensor representing the predicted probabilities.
+    #             y_true: a tensor representing the true labels.
+    #     """
+    #     patient_emb = []
+    #     for feature_key in self.feature_keys:
+    #         input_info = self.dataset.input_info[feature_key]
+    #         dim_, type_ = input_info["dim"], input_info["type"]
+    #
+    #         # for case 1: [code1, code2, code3, ...]
+    #         if (dim_ == 2) and (type_ == str):
+    #             raise NotImplementedError
+    #
+    #         # for case 2: [[code1, code2], [code3, ...], ...]
+    #         elif (dim_ == 3) and (type_ == str):
+    #             raise NotImplementedError
+    #
+    #
+    #         # for case 3: [[1.5, 2.0, 0.0], ...]
+    #         elif (dim_ == 2) and (type_ in [float, int]):
+    #             raise NotImplementedError
+    #
+    #
+    #         # for case 4: [[[1.5, 2.0, 0.0], [1.8, 2.4, 6.0]], ...]
+    #         elif (dim_ == 3) and (type_ in [float, int]):
+    #             raise NotImplementedError
+    #         else:
+    #             raise NotImplementedError
+    #
+    #         # _, x = self.transformer[feature_key](x, mask)
+    #         patient_emb.append(x)
+    #
+    #     # computed patient embedding
+    #     patient_emb = torch.cat(patient_emb, dim=1)
+    #
+    #     # get logits and loss
+    #     pooled_output = self.dropout(pooled_output)
+    #     logits = self.classifier(pooled_output)
+    #     # obtain y_true, loss, y_prob
+    #     y_true = self.prepare_labels(kwargs[self.label_key], self.label_tokenizer)
+    #     loss = self.get_loss(logits, data[self.label_key], all_attentions)
+    #     y_prob = self.prepare_y_prob(logits)
+    #     results = {
+    #         "loss": loss,
+    #         "y_prob": y_prob,
+    #         "y_true": y_true,
+    #         "logit": logits
+    #     }
+    #     if kwargs.get("embed", False):
+    #         results["embed"] = patient_emb
+    #     return results
 
 
 if __name__ == "__main__":
