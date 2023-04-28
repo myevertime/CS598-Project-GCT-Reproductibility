@@ -111,9 +111,9 @@ class Trainer:
     def train(
         self,
         train_dataloader: DataLoader,
+        train_prior_dataloader: DataLoader,
         val_dataloader: Optional[DataLoader] = None,
         test_dataloader: Optional[DataLoader] = None,
-        train_prior_dataloader: DataLoader = None,
         val_prior_dataloader: Optional[DataLoader] = None,
         test_prior_dataloader: Optional[DataLoader] = None,
         epochs: int = 5,
@@ -173,6 +173,8 @@ class Trainer:
 
         # initialize
         data_iterator = iter(train_dataloader)
+        data_prior_iterator = iter(train_prior_dataloader)
+
         best_score = -1 * float("inf") if monitor_criterion == "max" else float("inf")
         steps_per_epoch = len(train_dataloader)
         global_step = 0
@@ -189,13 +191,18 @@ class Trainer:
                 desc=f"Epoch {epoch} / {epochs}",
                 smoothing=0.05,
             ):
+
                 try:
                     data = next(data_iterator)
+                    data_prior = next(data_prior_iterator)
                 except StopIteration:
                     data_iterator = iter(train_dataloader)
+                    data_prior_iterator = iter(train_prior_dataloader)
                     data = next(data_iterator)
-                # forward
-                output = self.model(**data)
+                    data_prior = next(data_prior_iterator)
+
+                output = self.model(data, data_prior)
+
                 loss = output["loss"]
                 # backward
                 loss.backward()

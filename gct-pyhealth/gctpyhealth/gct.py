@@ -282,7 +282,7 @@ class GCT(BaseModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    def forward(self, data, priors_data):
+    def forward(self, data, priors_data, **kwargs):
         # TODO
         """ Returns:
             A dictionary with the following keys:
@@ -335,11 +335,26 @@ class GCT(BaseModel):
         pooled_output = self.pooler(hidden_states)
 
         # get logits and loss
+        # pooled_output = self.dropout(pooled_output)
+        # logits = self.classifier(pooled_output)
+        # loss = self.get_loss(logits, data[self.label_key], all_attentions)
+        # return tuple(v for v in [loss, logits, all_hidden_states, all_attentions] if v is not None)
+
+        # get logits and loss
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
+        # obtain y_true, loss, y_prob
+        y_true = self.prepare_labels(kwargs[self.label_key], self.label_tokenizer)
         loss = self.get_loss(logits, data[self.label_key], all_attentions)
+        y_prob = self.prepare_y_prob(logits)
+        results = {
+            "loss": loss,
+            "y_prob": y_prob,
+            "y_true": y_true,
+            "logit": logits
+        }
+        return results
 
-        return tuple(v for v in [loss, logits, all_hidden_states, all_attentions] if v is not None)
 
     # def forward(self, **kwargs) -> Dict[str, torch.Tensor]:
     #     """Forward propagation.
