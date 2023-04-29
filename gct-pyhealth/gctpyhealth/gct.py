@@ -172,7 +172,7 @@ class GCT(BaseModel):
     def __init__(
             self,
             dataset: BaseEHRDataset,
-            feature_keys: List[str] = ["dx_ints", "proc_ints"],
+            feature_keys: List[str] = ["conditions_enc", "procedures_enc"],
             label_key: str = "readmission",
             mode: str = "binary",
             embedding_dim: int = 128,
@@ -354,7 +354,6 @@ class GCT(BaseModel):
             "logit": logits
         }
         return results
-
 
     # def forward(self, **kwargs) -> Dict[str, torch.Tensor]:
     #     """Forward propagation.

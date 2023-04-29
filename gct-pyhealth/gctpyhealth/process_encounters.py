@@ -18,45 +18,70 @@ from pyhealth.tasks import mortality_prediction_eicu_fn
 
 
 class EncounterInfo:
-    def __init__(self, patient_id, encounter_id,
-                 encounter_timestamp, expired, readmission):
+    def __init__(self, patient_id, visit_id, encounter_timestamp,
+                 label_expired, label_readmission):
+        # information written during initialization
         self.patient_id = patient_id
-        self.encounter_id = encounter_id
+        self.visit_id = visit_id
         self.encounter_timestamp = encounter_timestamp
-        self.expired = expired
-        self.readmission = readmission
-        # self.labs = {} # unused at the moment
-        self.dx_ids = []
-        self.treatments = []
+        self.label_expired = label_expired
+        self.label_readmission = label_readmission
+
+        # update afterwards
+        self.conditions = []
+        self.procedures = []
 
 
 class EncounterFeatures:
-    def __init__(self, patient_id, label_expired, label_readmission, dx_ids, dx_ints, proc_ids, proc_ints):
-        # patient_id = line['patienthealthsystemstayid']
-        # discharge_status = line['unitdischargestatus']
-        # expired = True if discharge_status == 'Expired' else False
-        # label_readmission
-        # dx_ids = sorted(list(set(enc.dx_ids)))
-        # dx_ints = [dx_str2int[item] for item in dx_ids]
-        # proc_ids = sorted(list(set(enc.treatments)))
-        # proc_ints = [treat_str2int[item] for item in proc_ids]
-        # ef.dx_mask = [0 if i == dx_padding_idx else 1 for i in ef.dx_ints]
-        # ef.proc_mask = [0 if i == proc_padding_idx else 1 for i in ef.proc_ints]
-
+    def __init__(self, patient_id, visit_id,
+                 label_expired, label_readmission,
+                 conditions, conditions_hash,
+                 procedures, procedures_hash):
+        # information written during initialization
         self.patient_id = patient_id
+        self.visit_id = visit_id
+        self.encounter_key = patient_id + ':' + visit_id
+
         self.label_expired = label_expired
         self.label_readmission = label_readmission
-        self.dx_ids = dx_ids
-        self.dx_ints = dx_ints
-        self.proc_ids = proc_ids
-        self.proc_ints = proc_ints
+        self.conditions = conditions
+        self.conditions_hash = conditions_hash
+        self.procedures = procedures
+        self.procedures_hash = procedures_hash
+
+        # update afterwards
         self.prior_indices = None
         self.prior_values = None
-        self.dx_mask = None
-        self.proc_mask = None
+        self.conditions_mask = None
+        self.procedures_mask = None
+
+    def getKeyValueDict(self, task='mortality'):
+
+        label = None
+        if task == 'mortality':
+            label = self.label_expired
+        elif task == 'readmission':
+            label = self.label_readmission
+        else:
+            raise ValueError('task should be either mortality or readmission')
+
+        return {
+            "visit_id": self.visit_id,
+            "patient_id": self.patient_id,
+            "conditions": self.conditions,
+            "conditions_hash": self.conditions_hash,
+            "conditions_mask": self.conditions_mask,
+            "procedures": self.procedures,
+            "procedures_hash": self.procedures_hash,
+            "procedures_mask": self.procedures_mask,
+            "prior_indices": self.prior_indices,
+            "prior_values": self.prior_values,
+            "label": label,
+        }
 
 
-def get_encounter_features(encounter_dict, skip_duplicate=False, min_num_codes=1, max_num_codes=50):
+def get_encounter_features(encounter_infos, skip_duplicate=False,
+                           min_num_codes=1, max_num_codes=50):
     """
     In the original tf implementation, dx_ints and proc_ints are serialized as variable length sequences,
     which are converted to SparseTensors when retrieved and converted to dense tensors when the lookup method
@@ -67,105 +92,108 @@ def get_encounter_features(encounter_dict, skip_duplicate=False, min_num_codes=1
     """
     key_list = []
     enc_features_list = []
-    dx_str2int = {}
-    treat_str2int = {}
+    conditions_hash_map = {}
+    procedures_hash_map = {}
     num_cut = 0
     num_duplicate = 0
     count = 0
-    num_dx_ids = 0
-    num_treatments = 0
-    num_unique_dx_ids = 0
-    num_unique_treatments = 0
-    min_dx_cut = 0
-    min_treatment_cut = 0
-    max_dx_cut = 0
-    max_treatment_cut = 0
+    num_conditions = 0
+    num_procedures = 0
+    num_unique_conditions = 0
+    num_unique_procedures = 0
+    min_conditions_cut = 0
+    min_procedures_cut = 0
+    max_conditions_cut = 0
+    max_procedures_cut = 0
     num_expired = 0
     num_readmission = 0
 
-    for _, enc in encounter_dict.items():
+    for _, enc in encounter_infos.items():
         if skip_duplicate:
-            if len(enc.dx_ids) > len(set(enc.dx_ids)) or len(enc.treatments) > len(set(enc.treatments)):
+            if len(enc.conditions) > len(set(enc.conditions)) or \
+                    len(enc.procedures) > len(set(enc.procedures)):
                 num_duplicate += 1
                 continue
-        if len(set(enc.dx_ids)) < min_num_codes:
-            min_dx_cut += 1
+        if len(set(enc.conditions)) < min_num_codes:
+            min_conditions_cut += 1
             continue
-        if len(set(enc.treatments)) < min_num_codes:
-            min_treatment_cut += 1
+        if len(set(enc.procedures)) < min_num_codes:
+            min_procedures_cut += 1
             continue
-        if len(set(enc.dx_ids)) > max_num_codes:
-            max_dx_cut += 1
+        if len(set(enc.conditions)) > max_num_codes:
+            max_conditions_cut += 1
             continue
-        if len(set(enc.treatments)) > max_num_codes:
-            max_treatment_cut += 1
+        if len(set(enc.procedures)) > max_num_codes:
+            max_procedures_cut += 1
             continue
 
         count += 1
-        num_dx_ids += len(enc.dx_ids)
-        num_treatments += len(enc.treatments)
-        num_unique_dx_ids += len(set(enc.dx_ids))
-        num_unique_treatments += len(set(enc.treatments))
+        num_conditions += len(enc.conditions)
+        num_procedures += len(enc.procedures)
+        num_unique_conditions += len(set(enc.conditions))
+        num_unique_procedures += len(set(enc.procedures))
 
         # mapping the string to int
-        for dx_id in enc.dx_ids:
-            if dx_id not in dx_str2int:
-                dx_str2int[dx_id] = len(dx_str2int)
-        for treat_id in enc.treatments:
-            if treat_id not in treat_str2int:
-                treat_str2int[treat_id] = len(treat_str2int)
+        for dx_id in enc.conditions:
+            if dx_id not in conditions_hash_map:
+                conditions_hash_map[dx_id] = len(conditions_hash_map)
+        for treat_id in enc.procedures:
+            if treat_id not in procedures_hash_map:
+                procedures_hash_map[treat_id] = len(procedures_hash_map)
 
-        patient_id = enc.patient_id + ':' + enc.encounter_id
-        if enc.expired:
+        if enc.label_expired:
             label_expired = 1
             num_expired += 1
         else:
             label_expired = 0
-        if enc.readmission:
+
+        if enc.label_readmission:
             label_readmission = 1
             num_readmission += 1
         else:
             label_readmission = 0
 
-        dx_ids = sorted(list(set(enc.dx_ids)))
-        dx_ints = [dx_str2int[item] for item in dx_ids]
-        proc_ids = sorted(list(set(enc.treatments)))
-        proc_ints = [treat_str2int[item] for item in proc_ids]
+        conditions = sorted(list(set(enc.conditions)))
+        conditions_hash = [conditions_hash_map[item] for item in conditions]
+        procedures = sorted(list(set(enc.procedures)))
+        procedures_hash = [procedures_hash_map[item] for item in procedures]
 
-        enc_features = EncounterFeatures(patient_id, label_expired, label_readmission, dx_ids, dx_ints, proc_ids,
-                                         proc_ints)
+        enc_features = EncounterFeatures(enc.patient_id, enc.visit_id,
+                                         label_expired, label_readmission,
+                                         conditions, conditions_hash,
+                                         procedures, procedures_hash)
 
-        key_list.append(patient_id)
+        key_list.append(enc_features.encounter_key)
         enc_features_list.append(enc_features)
 
     # add padding
     for ef in enc_features_list:
-        dx_padding_idx = len(dx_str2int)
-        proc_padding_idx = len(treat_str2int)
-        if len(ef.dx_ints) < max_num_codes:
-            ef.dx_ints.extend([dx_padding_idx] * (max_num_codes - len(ef.dx_ints)))
-        if len(ef.proc_ints) < max_num_codes:
-            ef.proc_ints.extend([proc_padding_idx] * (max_num_codes - len(ef.proc_ints)))
-        ef.dx_mask = [0 if i == dx_padding_idx else 1 for i in ef.dx_ints]
-        ef.proc_mask = [0 if i == proc_padding_idx else 1 for i in ef.proc_ints]
+        dx_padding_idx = len(conditions_hash_map)
+        proc_padding_idx = len(procedures_hash_map)
+        if len(ef.conditions_hash) < max_num_codes:
+            ef.conditions_hash.extend([dx_padding_idx] * (max_num_codes - len(ef.conditions_hash)))
+        if len(ef.procedures_hash) < max_num_codes:
+            ef.procedures_hash.extend([proc_padding_idx] * (max_num_codes - len(ef.procedures_hash)))
+        ef.conditions_mask = [0 if i == dx_padding_idx else 1 for i in ef.conditions_hash]
+        ef.procedures_mask = [0 if i == proc_padding_idx else 1 for i in ef.procedures_hash]
 
     print('Filtered encounters due to duplicate codes: %d' % num_duplicate)
     print('Filtered encounters due to thresholding: %d' % num_cut)
 
-    print('Min dx cut: %d' % min_dx_cut)
-    print('Min treatment cut: %d' % min_treatment_cut)
-    print('Max dx cut: %d' % max_dx_cut)
-    print('Max treatment cut: %d' % max_treatment_cut)
+    print('Min conditions cut: %d' % min_conditions_cut)
+    print('Min procedures cut: %d' % min_procedures_cut)
+    print('Max conditions cut: %d' % max_conditions_cut)
+    print('Max procedures cut: %d' % max_procedures_cut)
     print('Number of expired: %d' % num_expired)
     print('Number of readmission: %d' % num_readmission)
 
     if count != 0:
-        print('Average num_dx_ids: %f' % (num_dx_ids / count))
-        print('Average num_treatments: %f' % (num_treatments / count))
-        print('Average num_unique_dx_ids: %f' % (num_unique_dx_ids / count))
-        print('Average num_unique_treatments: %f' % (num_unique_treatments / count))
+        print('Average num_conditions: %f' % (num_conditions / count))
+        print('Average num_procedures: %f' % (num_procedures / count))
+        print('Average num_unique_conditions: %f' % (num_unique_conditions / count))
+        print('Average num_unique_procedures: %f' % (num_unique_procedures / count))
 
-    return key_list, enc_features_list, dx_str2int, treat_str2int
+    return key_list, enc_features_list, conditions_hash_map, procedures_hash_map
 
 
 def select_train_valid_test(key_list, random_seed=1234):
@@ -186,12 +214,12 @@ def count_conditional_prob_dp(enc_features_list, output_path, train_key_set=None
 
     total_visit = 0
     for enc_feature in enc_features_list:
-        key = enc_feature.patient_id
+        key = enc_feature.encounter_key
         if train_key_set is not None and key not in train_key_set:
             total_visit += 1
             continue
-        dx_ids = enc_feature.dx_ids
-        proc_ids = enc_feature.proc_ids
+        dx_ids = enc_feature.conditions
+        proc_ids = enc_feature.procedures
         for dx in dx_ids:
             if dx not in dx_freqs:
                 dx_freqs[dx] = 0
@@ -239,12 +267,12 @@ def add_sparse_prior_guide_dp(enc_features_list, stats_path, key_set=None, max_n
     new_enc_features_list = []
     # prior_guide_list = []
     for enc_features in enc_features_list:
-        key = enc_features.patient_id
+        key = enc_features.encounter_key
         if key_set is not None and key not in key_set:
             total_visit += 1
             continue
-        dx_ids = enc_features.dx_ids
-        proc_ids = enc_features.proc_ids
+        dx_ids = enc_features.conditions
+        proc_ids = enc_features.procedures
         indices = []
         values = []
         for i, dx in enumerate(dx_ids):
@@ -270,16 +298,16 @@ def add_sparse_prior_guide_dp(enc_features_list, stats_path, key_set=None, max_n
 
 
 def convert_features_to_tensors(enc_features):
+    all_conditions_hash = torch.tensor([f.conditions_hash for f in enc_features], dtype=torch.long)
+    all_procedures_hash = torch.tensor([f.procedures_hash for f in enc_features], dtype=torch.long)
+    all_conditions_masks = torch.tensor([f.conditions_mask for f in enc_features], dtype=torch.float)
+    all_procedures_masks = torch.tensor([f.procedures_mask for f in enc_features], dtype=torch.float)
     all_readmission_labels = torch.tensor([f.label_readmission for f in enc_features], dtype=torch.long)
     all_expired_labels = torch.tensor([f.label_expired for f in enc_features], dtype=torch.long)
-    all_dx_ints = torch.tensor([f.dx_ints for f in enc_features], dtype=torch.long)
-    all_proc_ints = torch.tensor([f.proc_ints for f in enc_features], dtype=torch.long)
-    all_dx_masks = torch.tensor([f.dx_mask for f in enc_features], dtype=torch.float)
-    all_proc_masks = torch.tensor([f.proc_mask for f in enc_features], dtype=torch.float)
     # all_prior_indices = torch.tensor([f.prior_indices for f in enc_features], dtype=torch.long)
     # all_prior_values = torch.tensor([f.prior_values for f in enc_features], dtype=torch.float)
-    dataset = TensorDataset(all_dx_ints, all_proc_ints,
-                            all_dx_masks, all_proc_masks,
+    dataset = TensorDataset(all_conditions_hash, all_procedures_hash,
+                            all_conditions_masks, all_procedures_masks,
                             all_readmission_labels, all_expired_labels)
 
     return dataset

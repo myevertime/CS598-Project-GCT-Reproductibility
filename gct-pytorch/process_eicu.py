@@ -170,7 +170,8 @@ def get_encounter_features(encounter_dict, skip_duplicate=False, min_num_codes=1
 
     for _, enc in encounter_dict.items():
         if skip_duplicate:
-            if (len(enc.dx_ids) > len(set(enc.dx_ids)) or len(enc.treatments) > len(set(enc.treatments))):
+            if (len(enc.dx_ids) > len(set(enc.dx_ids)) or
+                    len(enc.treatments) > len(set(enc.treatments))):
                 num_duplicate += 1
                 continue
         if len(set(enc.dx_ids)) < min_num_codes:
