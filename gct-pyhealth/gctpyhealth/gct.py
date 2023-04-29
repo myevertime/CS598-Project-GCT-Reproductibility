@@ -18,10 +18,12 @@ class FeatureEmbedder(nn.Module):
         super().__init__()
         self.embeddings = {}
         self.feature_keys = feature_keys
-        self.dx_embeddings = nn.Embedding(vocab_sizes['dx_ints'] + 1, embedding_dim,
-                                          padding_idx=vocab_sizes['dx_ints'])
-        self.proc_embeddings = nn.Embedding(vocab_sizes['proc_ints'] + 1, embedding_dim,
-                                            padding_idx=vocab_sizes['proc_ints'])
+
+        # compute different embeddings: conditions, procedures, and visits
+        self.dx_embeddings = nn.Embedding(vocab_sizes['conditions_hash'] + 1, embedding_dim,
+                                          padding_idx=vocab_sizes['conditions_hash'])
+        self.proc_embeddings = nn.Embedding(vocab_sizes['procedures_hash'] + 1, embedding_dim,
+                                            padding_idx=vocab_sizes['procedures_hash'])
         self.visit_embeddings = nn.Embedding(1, embedding_dim)
 
         # stuff to try when everything is done as add-on
@@ -33,9 +35,9 @@ class FeatureEmbedder(nn.Module):
         embeddings = {}
         masks = {}
 
-        embeddings['dx_ints'] = self.dx_embeddings(features['dx_ints'])
-        embeddings['proc_ints'] = self.proc_embeddings(features['proc_ints'])
-        device = features['dx_ints'].device
+        embeddings['conditions_hash'] = self.dx_embeddings(features['conditions_hash'])
+        embeddings['procedures_hash'] = self.proc_embeddings(features['procedures_hash'])
+        device = features['conditions_hash'].device
 
         embeddings['visit'] = self.visit_embeddings(torch.tensor([0]).to(device))
         embeddings['visit'] = embeddings['visit'].unsqueeze(0).expand(batch_size, -1, -1)
@@ -172,8 +174,8 @@ class GCT(BaseModel):
     def __init__(
             self,
             dataset: BaseEHRDataset,
-            feature_keys: List[str] = ["conditions_enc", "procedures_enc"],
-            label_key: str = "readmission",
+            feature_keys: List[str] = ["conditions_hash", "procedures_hash"],
+            label_key: str = "expired",
             mode: str = "binary",
             embedding_dim: int = 128,
             max_num_codes: int = 50,
@@ -197,7 +199,8 @@ class GCT(BaseModel):
         self.num_labels = 2  # TODO args.num_labels
         self.label_key = label_key  # TODO args.label_key
         self.feature_keys = feature_keys  # TODO
-        self.vocab_sizes = {'dx_ints': 3249, 'proc_ints': 2210}  # TODO
+        self.vocab_sizes = {'conditions_hash': 3249,
+                            'procedures_hash': 2210}  # TODO
 
         self.num_heads = num_heads
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -216,8 +219,8 @@ class GCT(BaseModel):
         self.classifier = nn.Linear(self.embedding_dim, self.num_labels)
 
     def create_matrix_vdp(self, features, masks, priors):
-        batch_size = features['dx_ints'].shape[0]
-        device = features['dx_ints'].device
+        batch_size = features['conditions_hash'].shape[0]
+        device = features['conditions_hash'].device
         num_dx_ids = self.max_num_codes
         num_proc_ids = self.max_num_codes
         num_codes = 1 + num_dx_ids + num_proc_ids
@@ -307,19 +310,21 @@ class GCT(BaseModel):
                 results["embed"] = patient_emb
         """
 
+        # compute the embeddings and update the visit mask
         embedding_dict, mask_dict = self.embeddings(data)
-        mask_dict['dx_ints'] = data['dx_masks']
-        mask_dict['proc_ints'] = data['proc_masks']
+        mask_dict['conditions_hash'] = data['conditions_masks']
+        mask_dict['procedures_hash'] = data['procedures_masks']
 
         keys = ['visit'] + self.feature_keys
         hidden_states = torch.cat([embedding_dict[key] for key in keys], axis=1)
         masks = torch.cat([mask_dict[key] for key in keys], axis=1)
 
+        # extract the prior conditional probability
         guide, prior_guide = self.create_matrix_vdp(data, masks, priors_data)
 
+        # make attention_mask, guide_mask
         all_hidden_states = ()
         all_attentions = ()
-        # make attention_mask, guide_mask
         extended_attention_mask = self.get_extended_attention_mask(masks)
         extended_guide_mask = self.get_extended_attention_mask(guide)
 

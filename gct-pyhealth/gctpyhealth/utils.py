@@ -41,13 +41,13 @@ def priors_collate_fn(batch):
     return indices, values
 
 
-def get_extended_attention_mask(attention_mask):
-    if attention_mask.dim() == 2:
-        extended_attention_mask = attention_mask[:, None, None, :]
-    elif attention_mask.dim() == 3:
-        extended_attention_mask = attention_mask[:, None, :, :]
-    extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
-    return extended_attention_mask
+# def get_extended_attention_mask(attention_mask):
+#     if attention_mask.dim() == 2:
+#         extended_attention_mask = attention_mask[:, None, None, :]
+#     elif attention_mask.dim() == 3:
+#         extended_attention_mask = attention_mask[:, None, :, :]
+#     extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+#     return extended_attention_mask
 
 
 def set_seed(seed):
@@ -91,11 +91,16 @@ def nested_detach(tensors):
 
 
 def prepare_data(data, priors_data, device):
-    features = {'dx_ints': data[0], 'proc_ints': data[1], 'dx_masks': data[2], 'proc_masks': data[3],
-                'readmission': data[4], 'expired': data[5]}
+    features = {'conditions_hash': data[0],
+                'procedures_hash': data[1],
+                'conditions_masks': data[2],
+                'procedures_masks': data[3],
+                'readmission': data[4],
+                'expired': data[5]}
     for k, v in features.items():
         features[k] = v.to(device)
-    priors = {'indices': priors_data[0].to(device), 'values': priors_data[1].to(device)}
+    priors = {'indices': priors_data[0].to(device),
+              'values': priors_data[1].to(device)}
 
     return features, priors
 
