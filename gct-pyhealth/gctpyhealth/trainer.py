@@ -15,6 +15,8 @@ from pyhealth.metrics import (binary_metrics_fn, multiclass_metrics_fn,
                               multilabel_metrics_fn)
 from pyhealth.utils import create_directory
 
+from .utils import *
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,14 +67,14 @@ class Trainer:
     """
 
     def __init__(
-        self,
-        model: nn.Module,
-        checkpoint_path: Optional[str] = None,
-        metrics: Optional[List[str]] = None,
-        device: Optional[str] = None,
-        enable_logging: bool = True,
-        output_path: Optional[str] = None,
-        exp_name: Optional[str] = None,
+            self,
+            model: nn.Module,
+            checkpoint_path: Optional[str] = None,
+            metrics: Optional[List[str]] = None,
+            device: Optional[str] = None,
+            enable_logging: bool = True,
+            output_path: Optional[str] = None,
+            exp_name: Optional[str] = None,
     ):
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -109,21 +111,21 @@ class Trainer:
         return
 
     def train(
-        self,
-        train_dataloader: DataLoader,
-        train_prior_dataloader: DataLoader,
-        val_dataloader: Optional[DataLoader] = None,
-        test_dataloader: Optional[DataLoader] = None,
-        val_prior_dataloader: Optional[DataLoader] = None,
-        test_prior_dataloader: Optional[DataLoader] = None,
-        epochs: int = 5,
-        optimizer_class: Type[Optimizer] = torch.optim.Adam,
-        optimizer_params: Optional[Dict[str, object]] = None,
-        weight_decay: float = 0.0,
-        max_grad_norm: float = None,
-        monitor: Optional[str] = None,
-        monitor_criterion: str = "max",
-        load_best_model_at_last: bool = True,
+            self,
+            train_dataloader: DataLoader,
+            train_prior_dataloader: DataLoader,
+            val_dataloader: Optional[DataLoader] = None,
+            test_dataloader: Optional[DataLoader] = None,
+            val_prior_dataloader: Optional[DataLoader] = None,
+            test_prior_dataloader: Optional[DataLoader] = None,
+            epochs: int = 5,
+            optimizer_class: Type[Optimizer] = torch.optim.Adam,
+            optimizer_params: Optional[Dict[str, object]] = None,
+            weight_decay: float = 0.0,
+            max_grad_norm: float = None,
+            monitor: Optional[str] = None,
+            monitor_criterion: str = "max",
+            load_best_model_at_last: bool = True,
     ):
         """Trains the model.
 
@@ -187,9 +189,9 @@ class Trainer:
             # batch training loop
             logger.info("")
             for _ in trange(
-                steps_per_epoch,
-                desc=f"Epoch {epoch} / {epochs}",
-                smoothing=0.05,
+                    steps_per_epoch,
+                    desc=f"Epoch {epoch} / {epochs}",
+                    smoothing=0.05,
             ):
 
                 try:
@@ -201,6 +203,7 @@ class Trainer:
                     data = next(data_iterator)
                     data_prior = next(data_prior_iterator)
 
+                data, data_prior = prepare_data(data, data_prior, self.device)
                 output = self.model(data, data_prior)
 
                 loss = output["loss"]
@@ -222,8 +225,8 @@ class Trainer:
                 self.save_ckpt(os.path.join(self.exp_path, "last.ckpt"))
 
             # validation
-            if val_dataloader is not None:
-                scores = self.evaluate(val_dataloader)
+            if val_dataloader is not None and val_prior_dataloader is not None:
+                scores = self.evaluate(val_dataloader, val_prior_dataloader)
                 logger.info(f"--- Eval epoch-{epoch}, step-{global_step} ---")
                 for key in scores.keys():
                     logger.info("{}: {:.4f}".format(key, scores[key]))
@@ -240,24 +243,26 @@ class Trainer:
                             self.save_ckpt(os.path.join(self.exp_path, "best.ckpt"))
 
         # load best model
-        if load_best_model_at_last and self.exp_path is not None and os.path.isfile(os.path.join(self.exp_path, "best.ckpt")):
+        if load_best_model_at_last and self.exp_path is not None and os.path.isfile(
+                os.path.join(self.exp_path, "best.ckpt")):
             logger.info("Loaded best model")
             self.load_ckpt(os.path.join(self.exp_path, "best.ckpt"))
 
         # test
-        if test_dataloader is not None:
-            scores = self.evaluate(test_dataloader)
+        if test_dataloader is not None and test_prior_dataloader is not None:
+            scores = self.evaluate(test_dataloader, test_prior_dataloader)
             logger.info(f"--- Test ---")
             for key in scores.keys():
                 logger.info("{}: {:.4f}".format(key, scores[key]))
 
         return
 
-    def inference(self, dataloader, additional_outputs=None) -> Dict[str, float]:
+    def inference(self, dataloader, prior_dataloader, additional_outputs=None) -> Dict[str, float]:
         """Model inference.
 
         Args:
             dataloader: Dataloader for evaluation.
+            prior_dataloader: Prior Dataloader.
             additional_outputs: List of additional output to collect.
                 Defaults to None ([]).
 
@@ -272,10 +277,16 @@ class Trainer:
         y_prob_all = []
         if additional_outputs is not None:
             additional_outputs = {k: [] for k in additional_outputs}
-        for data in tqdm(dataloader, desc="Evaluation"):
+
+        # for data in tqdm(dataloader, desc="Evaluation"):
+        for data, prior_data in tqdm(zip(dataloader, prior_dataloader), desc="Evaluation"):
             self.model.eval()
+            data, prior_data = prepare_data(data, prior_data, self.device)
+
             with torch.no_grad():
-                output = self.model(**data)
+                # output = self.model(**data)
+                output = self.model(data, prior_data)
+
                 loss = output["loss"]
                 y_true = output["y_true"].cpu().numpy()
                 y_prob = output["y_prob"].cpu().numpy()
@@ -285,6 +296,7 @@ class Trainer:
                 if additional_outputs is not None:
                     for key in additional_outputs.keys():
                         additional_outputs[key].append(output[key].cpu().numpy())
+
         loss_mean = sum(loss_all) / len(loss_all)
         y_true_all = np.concatenate(y_true_all, axis=0)
         y_prob_all = np.concatenate(y_prob_all, axis=0)
@@ -294,16 +306,20 @@ class Trainer:
             return y_true_all, y_prob_all, loss_mean, additional_outputs
         return y_true_all, y_prob_all, loss_mean
 
-    def evaluate(self, dataloader) -> Dict[str, float]:
+    def evaluate(self, dataloader, prior_dataloader) -> Dict[str, float]:
         """Evaluates the model.
 
         Args:
             dataloader: Dataloader for evaluation.
+            prior_dataloader: Prior knowledge Dataloader for evaluation.
 
         Returns:
             scores: a dictionary of scores.
         """
-        y_true_all, y_prob_all, loss_mean = self.inference(dataloader)
+        y_true_all, y_prob_all, loss_mean = self.inference(dataloader, prior_dataloader)
+
+        # TODO: hacks, interpreting the output as binary classification
+        y_prob_all = np.argmax(y_prob_all, axis=1)
 
         mode = self.model.mode
         metrics_fn = get_metrics_fn(mode)
@@ -323,79 +339,79 @@ class Trainer:
         self.model.load_state_dict(state_dict)
         return
 
-
-if __name__ == "__main__":
-    import torch
-    import torch.nn as nn
-    from torch.utils.data import DataLoader, Dataset
-    from torchvision import datasets, transforms
-
-    from pyhealth.datasets.utils import collate_fn_dict
-
-    class MNISTDataset(Dataset):
-        def __init__(self, train=True):
-            transform = transforms.Compose(
-                [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
-            )
-            self.dataset = datasets.MNIST(
-                "../data", train=train, download=True, transform=transform
-            )
-
-        def __getitem__(self, index):
-            x, y = self.dataset[index]
-            return {"x": x, "y": y}
-
-        def __len__(self):
-            return len(self.dataset)
-
-    class Model(nn.Module):
-        def __init__(self):
-            super(Model, self).__init__()
-            self.mode = "multiclass"
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-            self.conv1 = nn.Conv2d(1, 32, 3, 1)
-            self.conv2 = nn.Conv2d(32, 64, 3, 1)
-            self.dropout1 = nn.Dropout(0.25)
-            self.dropout2 = nn.Dropout(0.5)
-            self.fc1 = nn.Linear(9216, 128)
-            self.fc2 = nn.Linear(128, 10)
-            self.loss = nn.CrossEntropyLoss()
-
-        def forward(self, x, y, **kwargs):
-            x = torch.stack(x, dim=0).to(self.device)
-            y = torch.tensor(y).to(self.device)
-            x = self.conv1(x)
-            x = torch.relu(x)
-            x = self.conv2(x)
-            x = torch.relu(x)
-            x = torch.max_pool2d(x, 2)
-            x = self.dropout1(x)
-            x = torch.flatten(x, 1)
-            x = self.fc1(x)
-            x = torch.relu(x)
-            x = self.dropout2(x)
-            x = self.fc2(x)
-            loss = self.loss(x, y)
-            y_prob = torch.softmax(x, dim=1)
-            return {"loss": loss, "y_prob": y_prob, "y_true": y}
-
-    train_dataset = MNISTDataset(train=True)
-    val_dataset = MNISTDataset(train=False)
-
-    train_dataloader = DataLoader(
-        train_dataset, collate_fn=collate_fn_dict, batch_size=64, shuffle=True
-    )
-    val_dataloader = DataLoader(
-        val_dataset, collate_fn=collate_fn_dict, batch_size=64, shuffle=False
-    )
-
-    model = Model()
-
-    trainer = Trainer(model, device="cuda" if torch.cuda.is_available() else "cpu")
-    trainer.train(
-        train_dataloader=train_dataloader,
-        val_dataloader=val_dataloader,
-        monitor="accuracy",
-        epochs=5,
-        test_dataloader=val_dataloader,
-    )
+# TODO: add example main, right now it is not compatible
+# if __name__ == "__main__":
+#     import torch
+#     import torch.nn as nn
+#     from torch.utils.data import DataLoader, Dataset
+#     from torchvision import datasets, transforms
+#
+#     from pyhealth.datasets.utils import collate_fn_dict
+#
+#     class MNISTDataset(Dataset):
+#         def __init__(self, train=True):
+#             transform = transforms.Compose(
+#                 [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
+#             )
+#             self.dataset = datasets.MNIST(
+#                 "../data", train=train, download=True, transform=transform
+#             )
+#
+#         def __getitem__(self, index):
+#             x, y = self.dataset[index]
+#             return {"x": x, "y": y}
+#
+#         def __len__(self):
+#             return len(self.dataset)
+#
+#     class Model(nn.Module):
+#         def __init__(self):
+#             super(Model, self).__init__()
+#             self.mode = "multiclass"
+#             self.device = "cuda" if torch.cuda.is_available() else "cpu"
+#             self.conv1 = nn.Conv2d(1, 32, 3, 1)
+#             self.conv2 = nn.Conv2d(32, 64, 3, 1)
+#             self.dropout1 = nn.Dropout(0.25)
+#             self.dropout2 = nn.Dropout(0.5)
+#             self.fc1 = nn.Linear(9216, 128)
+#             self.fc2 = nn.Linear(128, 10)
+#             self.loss = nn.CrossEntropyLoss()
+#
+#         def forward(self, x, y, **kwargs):
+#             x = torch.stack(x, dim=0).to(self.device)
+#             y = torch.tensor(y).to(self.device)
+#             x = self.conv1(x)
+#             x = torch.relu(x)
+#             x = self.conv2(x)
+#             x = torch.relu(x)
+#             x = torch.max_pool2d(x, 2)
+#             x = self.dropout1(x)
+#             x = torch.flatten(x, 1)
+#             x = self.fc1(x)
+#             x = torch.relu(x)
+#             x = self.dropout2(x)
+#             x = self.fc2(x)
+#             loss = self.loss(x, y)
+#             y_prob = torch.softmax(x, dim=1)
+#             return {"loss": loss, "y_prob": y_prob, "y_true": y}
+#
+#     train_dataset = MNISTDataset(train=True)
+#     val_dataset = MNISTDataset(train=False)
+#
+#     train_dataloader = DataLoader(
+#         train_dataset, collate_fn=collate_fn_dict, batch_size=64, shuffle=True
+#     )
+#     val_dataloader = DataLoader(
+#         val_dataset, collate_fn=collate_fn_dict, batch_size=64, shuffle=False
+#     )
+#
+#     model = Model()
+#
+#     trainer = Trainer(model, device="cuda" if torch.cuda.is_available() else "cpu")
+#     trainer.train(
+#         train_dataloader=train_dataloader,
+#         val_dataloader=val_dataloader,
+#         monitor="accuracy",
+#         epochs=5,
+#         test_dataloader=val_dataloader,
+#     )

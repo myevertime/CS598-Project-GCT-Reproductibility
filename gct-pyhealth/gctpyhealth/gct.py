@@ -1,20 +1,19 @@
-import numpy as np
-import os
-import sys
 import math
-import torch
-from typing import List, Dict, Union, Callable
+from typing import List
 
+import torch
 from torch import nn
-from pyhealth.datasets import eICUDataset
+
 from pyhealth.datasets import BaseEHRDataset
 from pyhealth.models.base_model import BaseModel
+from pyhealth.tokenizer import Tokenizer
+import torch.nn.functional as F
 
 VALID_OPERATION_LEVEL = ["visit", "event", "patient"]
 
 
 class FeatureEmbedder(nn.Module):
-    def __init__(self, feature_keys, vocab_sizes, embedding_dim, hidden_dropout_prob):
+    def __init__(self, feature_keys, vocab_sizes, embedding_dim, hidden_dropout):
         super().__init__()
         self.embeddings = {}
         self.feature_keys = feature_keys
@@ -28,7 +27,7 @@ class FeatureEmbedder(nn.Module):
 
         # stuff to try when everything is done as add-on
         self.layernorm = nn.LayerNorm(embedding_dim)
-        self.dropout = nn.Dropout(hidden_dropout_prob)
+        self.dropout = nn.Dropout(hidden_dropout)
 
     def forward(self, features):
         batch_size = features[self.feature_keys[0]].shape[0]
@@ -98,11 +97,11 @@ class SelfAttention(nn.Module):
 
 
 class SelfOutput(nn.Module):
-    def __init__(self, embedding_dim, hidden_dropout_prob):
+    def __init__(self, embedding_dim, hidden_dropout):
         super().__init__()
         self.dense = nn.Linear(embedding_dim, embedding_dim)
         self.layer_norm = nn.LayerNorm(embedding_dim)
-        self.dropout = nn.Dropout(hidden_dropout_prob)
+        self.dropout = nn.Dropout(hidden_dropout)
         self.activation = nn.ReLU()
 
     def forward(self, hidden_states, input_tensor):
@@ -113,10 +112,10 @@ class SelfOutput(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, num_heads, embedding_dim, hidden_dropout_prob, stack_idx):
+    def __init__(self, num_heads, embedding_dim, hidden_dropout, stack_idx):
         super().__init__()
         self.self_attention = SelfAttention(num_heads, embedding_dim, stack_idx)
-        self.self_output = SelfOutput(embedding_dim, hidden_dropout_prob)
+        self.self_output = SelfOutput(embedding_dim, hidden_dropout)
 
     def forward(self, hidden_states, attention_mask, guide_mask=None, prior=None, output_attentions=True):
         self_attention_outputs = self.self_attention(hidden_states, attention_mask, guide_mask, prior,
@@ -127,9 +126,9 @@ class Attention(nn.Module):
 
 
 class GCTLayer(nn.Module):
-    def __init__(self, num_heads, embedding_dim, hidden_dropout_prob, stack_idx):
+    def __init__(self, num_heads, embedding_dim, hidden_dropout, stack_idx):
         super().__init__()
-        self.attention = Attention(num_heads, embedding_dim, hidden_dropout_prob, stack_idx)
+        self.attention = Attention(num_heads, embedding_dim, hidden_dropout, stack_idx)
 
     def forward(self, hidden_states, attention_mask=None, guide_mask=None, prior=None, output_attentions=True):
         self_attention_outputs = self.attention(hidden_states, attention_mask, guide_mask, prior, output_attentions)
@@ -165,7 +164,7 @@ class GCT(BaseModel):
             information such as the set of all tokens.
         feature_keys:  list of keys in samples to use as features,
             e.g. ["diagnosisString", "admissionDx", "treatment"].
-        label_key: key in samples to use as label (e.g., "readmission", "mortality").
+        label_key: key in samples to use as label (e.g., "readmission", "expired").
         mode: one of "binary", "multiclass", or "multilabel".
         embedding_dim: the embedding dimension. Default is 128.
         **kwargs: other parameters for the GCT layer.
@@ -183,7 +182,7 @@ class GCT(BaseModel):
             batch_size: int = 32,
             reg_coef: float = 0.1,
             prior_scalar: float = 0.5,
-            hidden_dropout_prob: float = 0.08,
+            hidden_dropout: float = 0.08,
             num_heads: int = 1,
             **kwargs
     ):
@@ -195,15 +194,23 @@ class GCT(BaseModel):
             mode=mode,  # TODO
         )
 
+        # TODO: debug the tokenizer assignment
+        # the key of self.feat_tokenizers only contains the code based inputs
+        # self.feat_tokenizers = {}
+        # # self.label_tokenizer = self.get_label_tokenizer()
+        # label_tokens = ['0', '1']
+        # self.label_tokenizer = Tokenizer(label_tokens)
+        # self.output_size = self.get_output_size(self.label_tokenizer)
+        self.output_size = 2
+
         self.embedding_dim = embedding_dim
-        self.num_labels = 2  # TODO args.num_labels
-        self.label_key = label_key  # TODO args.label_key
-        self.feature_keys = feature_keys  # TODO
+        self.label_key = label_key
+        self.feature_keys = feature_keys
         self.vocab_sizes = {'conditions_hash': 3249,
-                            'procedures_hash': 2210}  # TODO
+                            'procedures_hash': 2210}
 
         self.num_heads = num_heads
-        self.hidden_dropout_prob = hidden_dropout_prob
+        self.hidden_dropout = hidden_dropout
         self.batch_size = batch_size
         self.num_stacks = num_stacks
         self.reg_coef = reg_coef
@@ -211,12 +218,12 @@ class GCT(BaseModel):
         self.max_num_codes = max_num_codes
 
         self.layers = nn.ModuleList(
-            [GCTLayer(self.num_heads, self.embedding_dim, self.hidden_dropout_prob, i) for i in range(self.num_stacks)])
+            [GCTLayer(self.num_heads, self.embedding_dim, self.hidden_dropout, i) for i in range(self.num_stacks)])
         self.embeddings = FeatureEmbedder(self.feature_keys, self.vocab_sizes, self.embedding_dim,
-                                          self.hidden_dropout_prob)
+                                          self.hidden_dropout)
         self.pooler = Pooler(self.embedding_dim)
         self.dropout = nn.Dropout(0.2)
-        self.classifier = nn.Linear(self.embedding_dim, self.num_labels)
+        self.classifier = nn.Linear(self.embedding_dim, self.output_size)
 
     def create_matrix_vdp(self, features, masks, priors):
         batch_size = features['conditions_hash'].shape[0]
@@ -261,9 +268,10 @@ class GCT(BaseModel):
 
         return guide, prior_guide
 
-    def get_loss(self, logits, labels, attentions):
+    def get_loss(self, logits, y_true, attentions):
         loss_fct = nn.CrossEntropyLoss()
-        loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+        loss = loss_fct(logits.view(-1, self.output_size), y_true.view(-1))
+        # loss = self.get_loss_function()(logits, y_true.unsqueeze(1))
 
         kl_terms = []
         for i in range(1, self.num_stacks):
@@ -286,30 +294,6 @@ class GCT(BaseModel):
         return extended_attention_mask
 
     def forward(self, data, priors_data, **kwargs):
-        # TODO
-        """ Returns:
-            A dictionary with the following keys:
-                loss: a scalar tensor representing the loss.
-                y_prob: a tensor representing the predicted probabilities.
-                y_true: a tensor representing the true labels.
-            ------
-            patient_emb = torch.cat(patient_emb, dim=1)
-            # (patient, label_size)
-            logits = self.fc(patient_emb)
-            # obtain y_true, loss, y_prob
-            y_true = self.prepare_labels(kwargs[self.label_key], self.label_tokenizer)
-            loss = self.get_loss_function()(logits, y_true)
-            y_prob = self.prepare_y_prob(logits)
-            results = {
-                "loss": loss,
-                "y_prob": y_prob,
-                "y_true": y_true,
-                "logit": logits,
-            }
-            if kwargs.get("embed", False):
-                results["embed"] = patient_emb
-        """
-
         # compute the embeddings and update the visit mask
         embedding_dict, mask_dict = self.embeddings(data)
         mask_dict['conditions_hash'] = data['conditions_masks']
@@ -349,82 +333,21 @@ class GCT(BaseModel):
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
         # obtain y_true, loss, y_prob
-        y_true = self.prepare_labels(kwargs[self.label_key], self.label_tokenizer)
-        loss = self.get_loss(logits, data[self.label_key], all_attentions)
+        # y_true = self.prepare_labels(kwargs[self.label_key], self.label_tokenizer)
+        # loss = self.get_loss_function()(logits, y_true)
+        y_true = data[self.label_key]
+        loss = self.get_loss(logits, y_true, all_attentions)
         y_prob = self.prepare_y_prob(logits)
         results = {
             "loss": loss,
             "y_prob": y_prob,
             "y_true": y_true,
-            "logit": logits
+            "logit": logits,
+            "all_hidden_states": all_hidden_states,
+            "all_attentions": all_attentions,
         }
         return results
 
-    # def forward(self, **kwargs) -> Dict[str, torch.Tensor]:
-    #     """Forward propagation.
-    #
-    #     The label `kwargs[self.label_key]` is a list of labels for each patient.
-    #
-    #     Args:
-    #         **kwargs: keyword arguments for the model. The keys must contain
-    #             all the feature keys and the label key.
-    #
-    #     Returns:
-    #         A dictionary with the following keys:
-    #             loss: a scalar tensor representing the loss.
-    #             y_prob: a tensor representing the predicted probabilities.
-    #             y_true: a tensor representing the true labels.
-    #     """
-    #     patient_emb = []
-    #     for feature_key in self.feature_keys:
-    #         input_info = self.dataset.input_info[feature_key]
-    #         dim_, type_ = input_info["dim"], input_info["type"]
-    #
-    #         # for case 1: [code1, code2, code3, ...]
-    #         if (dim_ == 2) and (type_ == str):
-    #             raise NotImplementedError
-    #
-    #         # for case 2: [[code1, code2], [code3, ...], ...]
-    #         elif (dim_ == 3) and (type_ == str):
-    #             raise NotImplementedError
-    #
-    #
-    #         # for case 3: [[1.5, 2.0, 0.0], ...]
-    #         elif (dim_ == 2) and (type_ in [float, int]):
-    #             raise NotImplementedError
-    #
-    #
-    #         # for case 4: [[[1.5, 2.0, 0.0], [1.8, 2.4, 6.0]], ...]
-    #         elif (dim_ == 3) and (type_ in [float, int]):
-    #             raise NotImplementedError
-    #         else:
-    #             raise NotImplementedError
-    #
-    #         # _, x = self.transformer[feature_key](x, mask)
-    #         patient_emb.append(x)
-    #
-    #     # computed patient embedding
-    #     patient_emb = torch.cat(patient_emb, dim=1)
-    #
-    #     # get logits and loss
-    #     pooled_output = self.dropout(pooled_output)
-    #     logits = self.classifier(pooled_output)
-    #     # obtain y_true, loss, y_prob
-    #     y_true = self.prepare_labels(kwargs[self.label_key], self.label_tokenizer)
-    #     loss = self.get_loss(logits, data[self.label_key], all_attentions)
-    #     y_prob = self.prepare_y_prob(logits)
-    #     results = {
-    #         "loss": loss,
-    #         "y_prob": y_prob,
-    #         "y_true": y_true,
-    #         "logit": logits
-    #     }
-    #     if kwargs.get("embed", False):
-    #         results["embed"] = patient_emb
-    #     return results
-
 
 if __name__ == "__main__":
-    from pyhealth.datasets import eICUDataset
-
     pass

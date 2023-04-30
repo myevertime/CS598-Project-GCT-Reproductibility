@@ -158,7 +158,7 @@ class ArgParser(argparse.ArgumentParser):
         return args
 
 
-def prediction_loop(device, label_key, model, dataloader, priors_datalaoder, description='Evaluating'):
+def prediction_loop(device, label_key, model, dataloader, priors_dataloader, description='Evaluating'):
     from tqdm import tqdm
     batch_size = dataloader.batch_size
     eval_losses = []
@@ -166,12 +166,12 @@ def prediction_loop(device, label_key, model, dataloader, priors_datalaoder, des
     label_ids = None
     model.eval()
 
-    for data, priors_data in tqdm(zip(dataloader, priors_datalaoder), desc=description):
+    for data, priors_data in tqdm(zip(dataloader, priors_dataloader), desc=description):
         data, priors_data = prepare_data(data, priors_data, device)
         with torch.no_grad():
             outputs = model(data, priors_data)
-            loss = outputs[0].mean().item()
-            logits = outputs[1]
+            loss = outputs['loss'].mean().item()
+            logits = outputs['logit']
 
         labels = data[label_key]
 

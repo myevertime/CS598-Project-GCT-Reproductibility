@@ -1,5 +1,5 @@
-from pyhealth.datasets import eICUDataset
-from process_encounters import *
+from .process_encounters import *
+from pyhealth.data import Event, Visit, Patient
 
 
 def readmission_prediction_eicu_fn_basic(patient: Patient, time_window=5):
@@ -52,7 +52,7 @@ def get_encounter_infos(eicu_dataset: eICUDataset):
                 continue
 
             # mortality labels
-            label_expired = True if visit.discharge_status == 'Expired' else False
+            label_expired = 1 if visit.discharge_status == 'Expired' else 0
 
             # readmission labels, check if the encounter is in the readmission samples
             label_readmission = 0
