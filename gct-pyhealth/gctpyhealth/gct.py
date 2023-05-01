@@ -184,14 +184,13 @@ class GCT(BaseModel):
             prior_scalar: float = 0.5,
             hidden_dropout: float = 0.08,
             num_heads: int = 1,
-            **kwargs
     ):
 
         super(GCT, self).__init__(
-            dataset=dataset,  # TODO
+            dataset=dataset,
             feature_keys=feature_keys,
             label_key=label_key,
-            mode=mode,  # TODO
+            mode=mode,
         )
 
         # TODO: debug the tokenizer assignment
@@ -273,7 +272,7 @@ class GCT(BaseModel):
     def get_loss(self, logits, y_true, attentions):
         loss_fct = nn.CrossEntropyLoss()
         loss = loss_fct(logits.view(-1, self.output_size), y_true.view(-1))
-        loss = self.get_loss_function()(logits, y_true.unsqueeze(1))
+        # loss = self.get_loss_function()(logits, y_true.unsqueeze(1))
 
         kl_terms = []
         for i in range(1, self.num_stacks):
