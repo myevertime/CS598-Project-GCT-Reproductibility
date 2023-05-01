@@ -320,13 +320,14 @@ class GCT(BaseModel):
             layer_outputs = layer_module(hidden_states, extended_attention_mask, extended_guide_mask, prior_guide)
             hidden_states = layer_outputs[0]
             all_attentions = all_attentions + (layer_outputs[1],)
-        all_hidden_states = all_hidden_states + (hidden_states,)
 
+        all_hidden_states = all_hidden_states + (hidden_states,)
         pooled_output = self.pooler(hidden_states)
 
         # get logits and loss
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
+
         # obtain y_true, loss, y_prob
         y_true = data[self.label_key]
         loss = self.get_loss(logits, y_true, all_attentions)
@@ -337,7 +338,7 @@ class GCT(BaseModel):
             "y_true": y_true,
             "logit": logits,
             "all_hidden_states": all_hidden_states,
-            "all_attentions": all_attentions,
+            "all_attentions": all_attentions
         }
         return results
 
