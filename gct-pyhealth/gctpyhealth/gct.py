@@ -232,6 +232,7 @@ class GCT(BaseModel):
         num_proc_ids = self.max_num_codes
         num_codes = 1 + num_dx_ids + num_proc_ids
 
+        # compute the guide matrix
         row0 = torch.cat([torch.zeros([1, 1]), torch.ones([1, num_dx_ids]), torch.zeros([1, num_proc_ids])], axis=1)
         row1 = torch.cat([torch.zeros([num_dx_ids, num_dx_ids + 1]), torch.ones([num_dx_ids, num_proc_ids])],
                          axis=1)
@@ -245,6 +246,7 @@ class GCT(BaseModel):
         guide = guide.expand(batch_size, -1, -1)
         guide = (guide * masks.unsqueeze(-1) * masks.unsqueeze(1) + torch.eye(num_codes).to(device).unsqueeze(0))
 
+        # compute the prior matrix
         prior_idx = priors['indices'].t()
         temp_idx = (prior_idx[:, 0] * 100000 + prior_idx[:, 1] * 1000 + prior_idx[:, 2])
         sorted_idx = torch.argsort(temp_idx)
@@ -271,7 +273,7 @@ class GCT(BaseModel):
     def get_loss(self, logits, y_true, attentions):
         loss_fct = nn.CrossEntropyLoss()
         loss = loss_fct(logits.view(-1, self.output_size), y_true.view(-1))
-        # loss = self.get_loss_function()(logits, y_true.unsqueeze(1))
+        loss = self.get_loss_function()(logits, y_true.unsqueeze(1))
 
         kl_terms = []
         for i in range(1, self.num_stacks):
@@ -324,17 +326,9 @@ class GCT(BaseModel):
         pooled_output = self.pooler(hidden_states)
 
         # get logits and loss
-        # pooled_output = self.dropout(pooled_output)
-        # logits = self.classifier(pooled_output)
-        # loss = self.get_loss(logits, data[self.label_key], all_attentions)
-        # return tuple(v for v in [loss, logits, all_hidden_states, all_attentions] if v is not None)
-
-        # get logits and loss
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
         # obtain y_true, loss, y_prob
-        # y_true = self.prepare_labels(kwargs[self.label_key], self.label_tokenizer)
-        # loss = self.get_loss_function()(logits, y_true)
         y_true = data[self.label_key]
         loss = self.get_loss(logits, y_true, all_attentions)
         y_prob = self.prepare_y_prob(logits)
