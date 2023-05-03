@@ -153,6 +153,11 @@ class ArgParser(argparse.ArgumentParser):
         self.add_argument('--do_eval', default=False, action='store_true')
         self.add_argument('--do_test', default=False, action='store_true')
 
+        # integrate cmd line arguments
+        self.add_argument('--label_key', type=str, default='expired')
+        self.add_argument('--num_stacks', type=int, default=3)
+        self.add_argument('--num_heads', type=int, default=1)
+
     def parse_args(self):
         args = super().parse_args()
         return args

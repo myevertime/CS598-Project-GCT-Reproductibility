@@ -28,8 +28,6 @@ import torchsummary as summary
 
 
 # In[15]:
-
-
 class Args:
     def __init__(self, prediction_task: str):
         if prediction_task == "expired":
@@ -37,17 +35,19 @@ class Args:
             self.learning_rate = 0.00011
             self.reg_coef = 1.5
             self.hidden_dropout = 0.72
+            self.post_mlp_dropout = 0.005
         elif prediction_task == "readmission":
             self.label_key = "readmission"
             self.learning_rate = 0.00022
             self.reg_coef = 0.1
             self.hidden_dropout = 0.08
+            self.post_mlp_dropout = 0.024
         else:
             raise ValueError("Invalid prediction task: {}".format(prediction_task))
 
         # Training arguments
-        # self.max_steps = 1000000
-        self.max_steps = 500000
+        self.max_steps = 1000000
+        # self.max_steps = 1000
         self.warmup = 0.05  # default
         self.logging_steps = 100  # default
         self.num_train_epochs = 1  # default
@@ -56,10 +56,10 @@ class Args:
         # Model parameters arguments
         self.embedding_dim = 128
         self.max_num_codes = 50
-        self.num_stacks = 2
+        self.num_stacks = 3
         self.batch_size = 32
         self.prior_scalar = 0.5
-        self.num_heads = 2
+        self.num_heads = 1
 
         # save and load the cache/dataset/env path (required)
         self.fold = 0
@@ -67,7 +67,7 @@ class Args:
         self.eicu_csv_dir = "../eicu_csv"
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         # self.output_dir = "eicu_output/model_pyhealth_" + timestamp
-        self.output_dir = "eicu_output/model_pyhealth_" + self.label_key + "_" + timestamp
+        self.output_dir = "eicu_output/model_pyhealth_" + self.label_key + '_' + timestamp
 
         # save and load the models (optional)
         self.save_model = True
@@ -75,8 +75,25 @@ class Args:
         self.prev_model_path = "eicu_output/model_pyhealth_" + self.label_key + "/model.pt"
 
 
-args = Args("expired")
+# integrate with command line arguments, trying different transformer stack and heads configurations
+cmd_args = ArgParser().parse_args()
+args = Args(cmd_args.label_key)
+
+args.learning_rate = cmd_args.learning_rate
+args.num_stacks = cmd_args.num_stacks
+args.num_heads = cmd_args.num_heads
+
 set_seed(args.seed)
+
+logging.info('*** Configuration: ***\n')
+logging.info('  label_key = {}\n'.format(args.label_key))
+logging.info('  num of Transformer stack = {}\n'.format(args.num_stacks))
+logging.info('  mutli-head attention = {}\n'.format(args.num_heads))
+logging.info('  batch size = {}\n'.format(args.batch_size))
+logging.info('  learning rate = {}\n'.format(args.learning_rate))
+logging.info('  reg coef = {}\n'.format(args.reg_coef))
+logging.info('  hidden dropout = {}\n'.format(args.hidden_dropout))
+logging.info('  max steps = {}\n'.format(args.max_steps))
 
 # ### **Step 1: Load dataset**
 # - **[README]:** We call [pyhealth.datasets](https://pyhealth.readthedocs.io/en/latest/api/datasets.html) to process and obtain the dataset.
@@ -178,12 +195,13 @@ model = GCT(
     mode="binary",
     embedding_dim=args.embedding_dim,
     max_num_codes=args.max_num_codes,
-    num_stacks=args.num_stacks,
     batch_size=args.batch_size,
+    num_stacks=args.num_stacks,
+    num_heads=args.num_heads,
     reg_coef=args.reg_coef,
     prior_scalar=args.prior_scalar,
     hidden_dropout=args.hidden_dropout,
-    num_heads=args.num_heads,
+    post_mlp_dropout=args.post_mlp_dropout
 )
 
 # loading previous checkpoint if available
@@ -195,7 +213,7 @@ if args.load_prev_model:
 model = model.to(device)
 
 # ### **Step 4: Model Training**
-# - **[README]:** We call our [pyhealth.train.Trainer](https://pyhealth.readthedocs.io/en/latest/api/trainer.html) to train the model by giving the `train_loader`, the `val_loader`, val_metric, and specify other arguemnts, such as epochs, optimizer, learning rate, etc. The trainer will automatically save the best model and output the path in the end.
+# - **[README]:** We call our [pyhealth.train.Trainer](https://pyhealth.readthedocs.io/en/latest/api/trainer.html) to train the model by giving the `train_loader`, the `val_loader`, val_metric, and specify other arguemnts, such as epochs, optimizer, learning rate, etc. The trainer will fmatically save the best model and output the path in the end.
 # - **[Next Step]:** The best model will be used in **Step 5** for evaluation.
 # 
 
@@ -217,6 +235,7 @@ args.eval_steps = num_update_steps_per_epoch // 2
 
 # prepare optimizer, scheduler
 optimizer = torch.optim.Adamax(model.parameters(), lr=args.learning_rate)
+# optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, betas=(0.9, 0.999), eps=1e-8)
 warmup_steps = max_steps // (1 / args.warmup)
 scheduler = get_linear_schedule_with_warmup(optimizer, warmup_steps, num_training_steps=max_steps)
 
@@ -309,6 +328,21 @@ logging.info('\n\nTraining completed')
 
 # In[23]:
 
+# save download the configuration setting
+
+config_file = os.path.join(args.output_dir, 'config.txt')
+with open(config_file, 'a') as writer:
+    # write download the arguments configuration
+    writer.write('*** Configuration: ***\n')
+    writer.write('  label_key = {}\n'.format(args.label_key))
+    writer.write('  num of Transformer stack = {}\n'.format(args.num_stacks))
+    writer.write('  mutli-head attention = {}\n'.format(args.num_heads))
+    writer.write('  batch size = {}\n'.format(args.batch_size))
+    writer.write('  learning rate = {}\n'.format(args.learning_rate))
+    writer.write('  reg coef = {}\n'.format(args.reg_coef))
+    writer.write('  hidden dropout = {}\n'.format(args.hidden_dropout))
+    writer.write('  max steps = {}\n'.format(args.max_steps))
+    writer.close()
 
 # Evaluation
 eval_results = {}
@@ -321,6 +355,7 @@ output_eval_file = os.path.join(args.output_dir, 'eval_results.txt')
 with open(output_eval_file, 'a') as writer:
     logger.info('*** Eval results @ steps:{} ***\n'.format(global_step))
     writer.write('*** Eval results @ steps:{} ***\n'.format(global_step))
+
     for key, value in eval_result.items():
         logger.info('{} = {}\n'.format(key, value))
         writer.write('{} = {}\n'.format(key, value))

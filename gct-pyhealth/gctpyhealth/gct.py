@@ -178,12 +178,13 @@ class GCT(BaseModel):
             mode: str = "binary",
             embedding_dim: int = 128,
             max_num_codes: int = 50,
-            num_stacks: int = 2,
             batch_size: int = 32,
+            num_stacks: int = 2,
+            num_heads: int = 1,
             reg_coef: float = 0.1,
             prior_scalar: float = 0.5,
             hidden_dropout: float = 0.08,
-            num_heads: int = 1,
+            post_mlp_dropout: float = 0.2,
     ):
 
         super(GCT, self).__init__(
@@ -210,6 +211,7 @@ class GCT(BaseModel):
 
         self.num_heads = num_heads
         self.hidden_dropout = hidden_dropout
+        self.post_mlp_dropout = post_mlp_dropout
         self.batch_size = batch_size
         self.num_stacks = num_stacks
         self.reg_coef = reg_coef
@@ -221,7 +223,7 @@ class GCT(BaseModel):
         self.embeddings = FeatureEmbedder(self.feature_keys, self.vocab_sizes, self.embedding_dim,
                                           self.hidden_dropout)
         self.pooler = Pooler(self.embedding_dim)
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(self.post_mlp_dropout)
         self.classifier = nn.Linear(self.embedding_dim, self.output_size)
 
     def create_matrix_vdp(self, features, masks, priors):
