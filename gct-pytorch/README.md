@@ -7,6 +7,9 @@ Viewing the result with Tensorboard
 tensorboard --logdir=eicu_output/model_0.00022_0.08_readmission
 ```
 
+We also added visualization codes which produce two attention map charts, heatmap and network graph.
+These charts are saved as png image files under ```args.output_dir/img/```
+
 ### Process CSV files output
 
 ```shell
