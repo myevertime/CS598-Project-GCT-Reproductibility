@@ -1,14 +1,16 @@
 # Graph Convolutional Transformer in pytorch
 
-The following gct-pytorch implementation mostly adopted from the [dchang56/gct-pytorch](https://github.com/dchang56/gct-pytorch) with slight modifications to fit our project purpose. Output of the training results is also provided for reference.
+The following gct-pytorch implementation mostly adopted from the [dchang56/gct-pytorch](https://github.com/dchang56/gct-pytorch) with **slight modifications** to fit our project purpose. Output of the training results is also provided for reference.
 
 Viewing the result with Tensorboard
 ```shell
 tensorboard --logdir=eicu_output/model_0.00022_0.08_readmission
 ```
 
-We also added visualization codes which produce two attention map charts, heatmap and network graph.
-These charts are saved as png image files under ```args.output_dir/img/```
+**We have also added visualization code to produce two attention map charts, a heatmap, and a network graph.**
+These charts are saved as PNG image files under ```args.output_dir/img/.```
+For a better understanding, you can find the descriptive notebook files under *notebooks/Attention Visualization.ipynb.*
+Additionally, there are two more notebooks that explain the data processing and training codes with some visualizations, so please check them out.
 
 ### Process CSV files output
 
