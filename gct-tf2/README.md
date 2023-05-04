@@ -13,10 +13,13 @@ To run the code, please follow the instructions below:
 - treatment.csv
 
 2. Then, run eicu_process.py to convert raw data in TFRecord format so that the model can read training data.
+
 ```python process_eicu.py <path to CSV files> <output path>```
+
 By default, this will generate 5 folds of sets of train/validation/test data.
 
-Finally, run train.py to train the GCT model on eICU data.
+3. Finally, run train.py to train the GCT model on eICU data.
+
 ```python train.py <path to TFRecords> <output path>```
 
 Contributor: [Hyeonjae Cho](https://github.com/myevertime)
