@@ -4,6 +4,7 @@ eicu_output
 output
 
 */eicu_data*
+*/training_scripts
 
 # user defined
 .idea

@@ -79,6 +79,7 @@ class Args:
 cmd_args = ArgParser().parse_args()
 args = Args(cmd_args.label_key)
 
+args.post_mlp_dropout = cmd_args.post_mlp_dropout
 args.num_stacks = cmd_args.num_stacks
 args.num_heads = cmd_args.num_heads
 

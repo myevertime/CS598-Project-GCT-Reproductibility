@@ -79,9 +79,15 @@ class Args:
 cmd_args = ArgParser().parse_args()
 args = Args(cmd_args.label_key)
 
+args.post_mlp_dropout = cmd_args.post_mlp_dropout
 args.learning_rate = cmd_args.learning_rate
 args.num_stacks = cmd_args.num_stacks
 args.num_heads = cmd_args.num_heads
+args.max_steps = cmd_args.max_steps
+
+# loading prev model
+args.load_prev_model = cmd_args.load_prev_model
+args.prev_model_path = cmd_args.prev_model_path
 
 set_seed(args.seed)
 
@@ -93,6 +99,7 @@ logging.info('  batch size = {}\n'.format(args.batch_size))
 logging.info('  learning rate = {}\n'.format(args.learning_rate))
 logging.info('  reg coef = {}\n'.format(args.reg_coef))
 logging.info('  hidden dropout = {}\n'.format(args.hidden_dropout))
+logging.info('  post MLP dropout = {}\n'.format(args.post_mlp_dropout))
 logging.info('  max steps = {}\n'.format(args.max_steps))
 
 # ### **Step 1: Load dataset**
@@ -341,6 +348,7 @@ with open(config_file, 'a') as writer:
     writer.write('  learning rate = {}\n'.format(args.learning_rate))
     writer.write('  reg coef = {}\n'.format(args.reg_coef))
     writer.write('  hidden dropout = {}\n'.format(args.hidden_dropout))
+    writer.write('  post MLP dropout = {}\n'.format(args.post_mlp_dropout))
     writer.write('  max steps = {}\n'.format(args.max_steps))
     writer.close()
 
