@@ -42,7 +42,11 @@ The Graph Convolutional Transformer model utilizes the eICU dataset, which consi
 
 To access the original data used in the paper, you can download it from [here](https://eicu-crd.mit.edu/gettingstarted/access/). However, to download the data, you are required to participate in the CITI training program, and you can find the detailed guidelines on the eICU website.
 
-The model's training data includes four CSV files: `admissionDx`, `patient`, `treatment`, and `diagnosis`. The data is then preprocessed using a processing script, which extracts relevant features and constructs a graph adjacency matrix. The graph adjacency matrix illustrates the relationships between different clinical events, such as diagnoses, medications, and procedures, for each patient. This graph is then utilized as input to the Graph Convolutional Transformer model to predict patient outcomes.
+The model's training data includes four CSV files: `admissionDx`, `patient`, `treatment`, and `diagnosis`. A few more files are required for Pyhealth basic pipeline that are recommended to include: `hospital`, `medical`, and `physicalExam`. The data is then preprocessed using a processing script, which extracts relevant features and constructs a graph adjacency matrix. The graph adjacency matrix illustrates the relationships between different clinical events, such as diagnoses, medications, and procedures, for each patient. This graph is then utilized as input to the Graph Convolutional Transformer model to predict patient outcomes.
+
+### Data download instruction:
+- Download the datasets and the above-mentioned CSV files from [here](https://physionet.org/content/eicu-crd/2.0/#files) after you became a credentialed user.
+- Place the downloaded files under the `dl4h-gp30-gct/eicu_ouput` directory and unzip the files.
 
 ## Usage
 1.  Clone the repository to your local machine.

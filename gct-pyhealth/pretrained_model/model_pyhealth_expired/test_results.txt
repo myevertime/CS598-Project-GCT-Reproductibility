@@ -1,0 +1,4 @@
+*** Test results @ steps:1000000 ***
+eval_loss = 18.980131106524244
+eval_AUCPR = 0.6041973974292619
+eval_AUROC = 0.7817609670987039

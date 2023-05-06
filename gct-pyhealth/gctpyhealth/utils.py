@@ -123,7 +123,7 @@ def compute_metrics(preds, labels):
     metrics['AUROC'] = auc_roc
 
     # f1 score, precision, recall
-    precision, recall, fscore, support = precision_recall_fscore_support(labels, preds, average='weighted')
+    # precision, recall, fscore, support = precision_recall_fscore_support(labels, preds, average='weighted')
     # metrics['precision'] = precision
     # metrics['recall'] = recall
     # metrics['fscore'] = fscore
@@ -152,6 +152,16 @@ class ArgParser(argparse.ArgumentParser):
         self.add_argument('--do_train', default=False, action='store_true')
         self.add_argument('--do_eval', default=False, action='store_true')
         self.add_argument('--do_test', default=False, action='store_true')
+
+        # integrate cmd line arguments
+        self.add_argument('--label_key', type=str, default='expired')
+        self.add_argument('--num_stacks', type=int, default=3)
+        self.add_argument('--num_heads', type=int, default=1)
+        self.add_argument('--post_mlp_dropout', type=float, default=0.2)
+
+        # loading prev model
+        self.add_argument('--load_prev_model', default=False, action='store_true')
+        self.add_argument('--prev_model_path', type=str, default="eicu_output/model_pyhealth/model.p")
 
     def parse_args(self):
         args = super().parse_args()

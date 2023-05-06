@@ -1,9 +1,11 @@
 eicu_csv
 eicu_data*
-#eicu_output
+eicu_output
 output
+archive
 
 */eicu_data*
+*/training_scripts
 
 # user defined
 .idea

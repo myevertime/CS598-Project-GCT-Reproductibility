@@ -178,20 +178,20 @@ class GCT(BaseModel):
             mode: str = "binary",
             embedding_dim: int = 128,
             max_num_codes: int = 50,
-            num_stacks: int = 2,
             batch_size: int = 32,
+            num_stacks: int = 2,
+            num_heads: int = 1,
             reg_coef: float = 0.1,
             prior_scalar: float = 0.5,
             hidden_dropout: float = 0.08,
-            num_heads: int = 1,
-            **kwargs
+            post_mlp_dropout: float = 0.2,
     ):
 
         super(GCT, self).__init__(
-            dataset=dataset,  # TODO
+            dataset=dataset,
             feature_keys=feature_keys,
             label_key=label_key,
-            mode=mode,  # TODO
+            mode=mode,
         )
 
         # TODO: debug the tokenizer assignment
@@ -211,6 +211,7 @@ class GCT(BaseModel):
 
         self.num_heads = num_heads
         self.hidden_dropout = hidden_dropout
+        self.post_mlp_dropout = post_mlp_dropout
         self.batch_size = batch_size
         self.num_stacks = num_stacks
         self.reg_coef = reg_coef
@@ -222,7 +223,7 @@ class GCT(BaseModel):
         self.embeddings = FeatureEmbedder(self.feature_keys, self.vocab_sizes, self.embedding_dim,
                                           self.hidden_dropout)
         self.pooler = Pooler(self.embedding_dim)
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(self.post_mlp_dropout)
         self.classifier = nn.Linear(self.embedding_dim, self.output_size)
 
     def create_matrix_vdp(self, features, masks, priors):
@@ -273,7 +274,7 @@ class GCT(BaseModel):
     def get_loss(self, logits, y_true, attentions):
         loss_fct = nn.CrossEntropyLoss()
         loss = loss_fct(logits.view(-1, self.output_size), y_true.view(-1))
-        loss = self.get_loss_function()(logits, y_true.unsqueeze(1))
+        # loss = self.get_loss_function()(logits, y_true.unsqueeze(1))
 
         kl_terms = []
         for i in range(1, self.num_stacks):
@@ -321,13 +322,14 @@ class GCT(BaseModel):
             layer_outputs = layer_module(hidden_states, extended_attention_mask, extended_guide_mask, prior_guide)
             hidden_states = layer_outputs[0]
             all_attentions = all_attentions + (layer_outputs[1],)
-        all_hidden_states = all_hidden_states + (hidden_states,)
 
+        all_hidden_states = all_hidden_states + (hidden_states,)
         pooled_output = self.pooler(hidden_states)
 
         # get logits and loss
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
+
         # obtain y_true, loss, y_prob
         y_true = data[self.label_key]
         loss = self.get_loss(logits, y_true, all_attentions)
@@ -338,7 +340,7 @@ class GCT(BaseModel):
             "y_true": y_true,
             "logit": logits,
             "all_hidden_states": all_hidden_states,
-            "all_attentions": all_attentions,
+            "all_attentions": all_attentions
         }
         return results
 
