@@ -1,0 +1,4 @@
+*** Eval results @ steps:1000000 ***
+eval_loss = 2.454518230374546
+eval_AUCPR = 0.27951633002984333
+eval_AUROC = 0.5549250419020423
