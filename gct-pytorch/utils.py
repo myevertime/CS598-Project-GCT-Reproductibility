@@ -186,6 +186,8 @@ class ArgParser(argparse.ArgumentParser):
         self.add_argument('--do_eval', default=False, action='store_true')
         self.add_argument('--do_test', default=False, action='store_true')
 
+        self.add_argument('--save_model', default=False, action='store_true')
+
     def parse_args(self):
         args = super().parse_args()
         return args

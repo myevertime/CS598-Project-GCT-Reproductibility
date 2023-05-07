@@ -65,7 +65,8 @@ def get_encounter_infos(eicu_dataset: eICUDataset):
                                       label_expired, label_readmission)
 
             # extract codes list of the visit
-            diagnosis = [cond.lower() for cond in visit.get_code_list(table="diagnosisString")]
+            # diagnosis = [cond.lower() for cond in visit.get_code_list(table="diagnosisString")]
+            diagnosis = list(set([dx.attr_dict["diagnosisString"] for dx in visit.get_event_list("diagnosis")]))
             admissionDx = [dx.lower() for dx in visit.get_code_list(table="admissionDx")]
             treatment = [treat.lower() for treat in visit.get_code_list(table="treatment")]
             # procedures = visit.get_code_list(table="physicalExam")
@@ -122,7 +123,7 @@ def get_eicu_datasets(data_dir, eicu_csv_dir, fold=0):
         print('Loading eICU dataset')
         eicu_dataset = eICUDataset(
             root=eicu_csv_dir,
-            tables=["treatment", "admissionDx", "diagnosisString"],
+            tables=["treatment", "admissionDx", "diagnosis"],
             refresh_cache=False,
             # dev=True,
         )
