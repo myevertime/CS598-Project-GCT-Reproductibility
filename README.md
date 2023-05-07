@@ -17,14 +17,17 @@ To enhance the understanding of GCT, we also added auxiliary functions, such as 
 The repository is structured as follows:
 ```
 .
+├── eicu_csv/               # The original eICU dataset CSV files
 ├── gct-pyhealth/
-│   ├── archive/
-│   ├── eicu_output/
+│   ├── eicu_data/          # The pre-processed data should be placed here
+│   ├── eicu_output/        # The model outputs will be saved here
 │   ├── gctpyhealth/
-│   └── training_scripts/
+│   ├── training_scripts/
+│   ├── pretrained_model/   # Sample pretrained models
 │   └── ...
 ├── gct-pytorch/
-│   ├── eicu_output/
+│   ├── eicu_data/          # The pre-processed data should be placed here
+│   ├── eicu_output/        # The model outputs will be saved here
 │   ├── notebooks/
 │   ├── training_scripts/
 │   └── ...
